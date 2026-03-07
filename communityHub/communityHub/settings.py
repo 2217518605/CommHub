@@ -49,6 +49,7 @@ INSTALLED_APPS = [
     'mptt',  # 注册 django-mptt , 用 MPTTModel 替代 Django 原生的 models.Model，自动获得树形功能
     'drf_yasg',   # Swagger 文档
     'models', # 基础模型
+    'organization_app', # 组织机构应用
 ]
 
 MIDDLEWARE = [
@@ -279,4 +280,5 @@ REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
         'rest_framework_simplejwt.authentication.JWTAuthentication'
     ],
+    'EXCEPTION_HANDLER': 'config.help_tools.common_exception_handler',
 }
