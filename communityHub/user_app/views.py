@@ -1,5 +1,6 @@
 import logging
 import datetime
+import time
 
 from django.shortcuts import render
 from django.db import transaction
@@ -9,6 +10,7 @@ from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.viewsets import ViewSet
 from rest_framework_simplejwt.tokens import RefreshToken, AccessToken
+from rest_framework_simplejwt.exceptions import TokenError, InvalidToken
 from rest_framework.settings import api_settings
 
 from user_app.models import User
@@ -111,7 +113,6 @@ class UserLoginView(ViewSet):
                 access = refresh.access_token
                 access.set_exp(access_token_lifetime)
 
-                # 7. 返回响应数据
                 response_data = {
                     'user_info': UserResponseSerializer(user).data,
                     'token': {
@@ -140,4 +141,62 @@ class UserLoginView(ViewSet):
     @api_doc(tags=["用户 用户登出"], request_body=None, response_body=EmptySerializer)
     @api_post
     def user_login_out(self, request):
-        pass
+        """ 核心就是处理refresh_token"""
+
+        client_ip = get_client_ip(request)
+        logger.debug(f'用户 本次用户登出请求的ip为: {client_ip}')
+        raw_refresh_token = request.data.get('refresh_token')
+        raw_access_token = request.data.get('access_token')
+        if not raw_refresh_token:
+            logger.warning(f'用户 refresh_token不能为空')
+            return Response({
+                'status': status.HTTP_400_BAD_REQUEST,
+                'message': 'refresh_token不能为空',
+                'data': None
+            })
+
+        if raw_access_token:
+            try:
+                token = AccessToken(raw_access_token)
+                exp = token["exp"]  # 获取token的过期时间
+                now_time = time.time()  # 获取当前时间戳
+                remaining_seconds = exp - now_time  # 计算剩余秒数
+                if remaining_seconds > 0:
+                    logger.debug(f'Access token 加入黑名单，剩余有效期: {remaining_seconds}s')
+                    cache.set(f"blacklist_access:{raw_access_token}", 1, timeout=remaining_seconds)
+            except TokenError as e:
+                logger.warning(f'用户 IP {client_ip}: 无效或过期的 access_token，跳过黑名单: {str(e)}')
+
+        try:
+            token = RefreshToken(raw_refresh_token)
+            exp = token["exp"]
+            now_time = time.time()
+            remaining_seconds = exp - now_time
+
+            if remaining_seconds > 0:
+                cache.set(f'blacklist_refresh:{token}', 1, timeout=remaining_seconds)
+                logger.info(f'用户 IP {client_ip}: 用户登出成功，refresh_token 加入黑名单（剩余 {remaining_seconds}s）')
+            else:
+                logger.info(f'用户 IP {client_ip}: refresh_token 已过期，无需加入黑名单')
+
+            return Response({
+                'status': status.HTTP_200_OK,
+                'message': '登出成功',
+                'data': None
+            }
+            )
+
+        except TokenError as e:
+            logger.warning(f'用户 IP {client_ip}: refresh_token 无效或已过期: {str(e)}')
+            return Response({
+                'status': status.HTTP_400_BAD_REQUEST,
+                'message': 'refresh_token 无效或已过期',
+                'data': None
+            })
+        except Exception as e:
+            logger.error(f'用户 IP {client_ip}: 登出发生未知错误: {str(e)}', exc_info=True)
+            return Response({
+                'status': status.HTTP_500_INTERNAL_SERVER_ERROR,
+                'message': '登出失败，请稍后重试',
+                'data': None
+            })

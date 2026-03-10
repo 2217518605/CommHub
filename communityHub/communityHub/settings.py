@@ -273,7 +273,7 @@ LOGGING = {
 
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
-        'rest_framework_simplejwt.authentication.JWTAuthentication'
+        'user_app.authentication.BlacklistJWTAuthentication'
     ],
     'EXCEPTION_HANDLER': 'config.help_tools.common_exception_handler',
 }
