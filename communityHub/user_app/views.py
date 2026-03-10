@@ -14,11 +14,13 @@ from rest_framework.settings import api_settings
 from user_app.models import User
 from config.decorators.common import api_doc, api_get, api_post, api_put, api_delete
 from config.help_tools import CommonPageNumberPagination
-from user_app.serializers import UserRegisterSerializer, UserResponseSerializer, UserLoginSerializer
+from user_app.serializers import UserRegisterSerializer, UserResponseSerializer, UserLoginSerializer, \
+    UserUpdateSerializer, UserDeleteSerializer
 from config.serializers.base import EmptySerializer
 from organization_app.models import Organization
 from config.help_tools import get_client_ip
-from user_app.validators import check_ip_lock, check_account_lock, record_login_failure, clear_login_success_cache
+from user_app.validators import check_ip_lock, check_account_lock, record_login_failure, clear_login_success_cache, \
+    record_ip_register
 
 logger = logging.getLogger(__name__)
 
@@ -30,23 +32,106 @@ class UserRetrieveView(ViewSet):
     @transaction.atomic
     def create_user(self, request):
 
+        # 限制一个 IP 重复注册(10次)
+        ip_lock_response = check_ip_lock(request)
+        if ip_lock_response:
+            return ip_lock_response
+
         serializer = UserRegisterSerializer(data=request.data)
 
         if serializer.is_valid():
-            serializer.save()
-            logger.info(
-                f"用户 用户创建成功: username={serializer.validated_data['username']} account={serializer.validated_data['account']}")
+            register_data = serializer.save()
+            account = serializer.validated_data['account']
+            logger.info(f"用户 用户创建成功: account={account}")
+            record_ip_register(request)  # 记录 IP 注册次数
             return Response({
                 "status": status.HTTP_201_CREATED,
                 "message": f"创建用户 {serializer.validated_data['account']} 成功",
-                "data": serializer.data
+                "data": UserResponseSerializer(register_data).data
             })
         else:
             logger.error(f'用户 创建用户错误：{serializer.errors}')
+            record_ip_register(request)  # 记录 IP 注册次数
             return Response({
                 "status": status.HTTP_400_BAD_REQUEST,
                 "message": "创建用户失败",
                 "data": serializer.errors
+            })
+
+    @api_doc(tags=["用户 用户更新"], request_body=UserUpdateSerializer, response_body=UserResponseSerializer)
+    @api_put
+    def update(self, request, pk):
+
+        logger.info(f"用户 用户更新:要求更新的用户 ID ：{pk}")
+
+        # 防止不是本人的恶意修改
+        if request.user.pk != pk:
+            logger.warning(f"用户 发生越权修改，用户更新失败:用户 ID ：{pk} 的用户非法")
+            return Response({
+                "status": status.HTTP_403_FORBIDDEN,
+                "message": "用户无权限更新",
+                "data": None
+            })
+
+        try:
+            user = User.objects.select_related("organization").get(pk=pk)
+
+            serializer = UserUpdateSerializer(instance=user, data=request.data)
+            if serializer.is_valid():
+                update_data = serializer.save()
+                logger.info(
+                    f"用户 用户更新成功: account={serializer.validated_data['account']}")
+                return Response({
+                    "status": status.HTTP_200_OK,
+                    "message": f"更新用户 {serializer.validated_data['account']} 成功",
+                    "data": UserResponseSerializer(update_data).data
+                })
+            else:
+                logger.error(f'用户 用户更新错误：{serializer.errors}')
+                return Response({
+                    "status": status.HTTP_400_BAD_REQUEST,
+                    "message": "更新用户失败",
+                })
+
+        except User.DoesNotExist:
+            logger.warning(f"用户 用户更新失败:用户 ID ：{pk} 不存在")
+            return Response({
+                "status": status.HTTP_404_NOT_FOUND,
+                "message": "用户不存在",
+                "data": None
+            })
+
+    @api_doc(tags=["用户 用户删除"], request_body=UserDeleteSerializer, response_body=EmptySerializer)
+    @api_delete
+    def delete(self, request, pk):
+
+        logger.info(f"用户 用户删除:要求删除的用户 ID ：{pk}")
+
+        if request.user.pk != pk:
+            logger.warning(f"用户 发生越权删除，用户删除失败:用户 ID ：{pk} 的用户非法")
+            return Response({
+                "status": status.HTTP_403_FORBIDDEN,
+                "message": "用户无权限删除",
+                "data": None
+            })
+
+        try:
+            user = User.objects.select_related("organization").get(pk=pk)
+            user_name = user.username
+            user_account = user.account
+            user.delete()
+            logger.info(f"用户 用户删除成功: username={user_name} account={user_account}")
+            return Response({
+                "status": status.HTTP_200_OK,
+                "message": f"删除用户 {user_account} 成功",
+                "data": None
+            })
+        except User.DoesNotExist:
+            logger.warning(f"用户 用户删除失败:用户 ID ：{pk} 不存在")
+            return Response({
+                "status": status.HTTP_404_NOT_FOUND,
+                "message": "用户不存在",
+                "data": None
             })
 
 
@@ -97,6 +182,7 @@ class UserLoginView(ViewSet):
                     })
 
                 logger.info(f"用户 IP：{client_ip} 账号：{account} 登录成功，登录时间为：{user.last_login}")
+                # 清楚失败的缓存
                 clear_login_success_cache(account)
 
                 user.last_login = datetime.datetime.now()
@@ -173,7 +259,7 @@ class UserLoginView(ViewSet):
             remaining_seconds = exp - now_time
 
             if remaining_seconds > 0:
-                cache.set(f'blacklist_refresh:{token}', 1, timeout=remaining_seconds)
+                cache.set(f'blacklist_refresh:{raw_refresh_token}', 1, timeout=remaining_seconds)
                 logger.info(f'用户 IP {client_ip}: 用户登出成功，refresh_token 加入黑名单（剩余 {remaining_seconds}s）')
             else:
                 logger.info(f'用户 IP {client_ip}: refresh_token 已过期，无需加入黑名单')

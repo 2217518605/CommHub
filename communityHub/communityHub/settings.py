@@ -278,9 +278,10 @@ REST_FRAMEWORK = {
     'EXCEPTION_HANDLER': 'config.help_tools.common_exception_handler',
 }
 
-CACHE_KEY_IP_FAIL = "login_fail_ip_{}"  # 缓存登录Ip次数
-CACHE_KEY_ACCOUNT_FAIL = "fail_account_{}"  # 缓存登录账号次数
+CACHE_KEY_IP_FAIL = "login_fail_ip_{}"  # 缓存登录失败的 Ip 次数
+CACHE_KEY_REGISTER = "register_ip_{}" # 缓存注册的 Ip
+CACHE_KEY_ACCOUNT_FAIL = "fail_account_{}"  # 缓存同一账号次数
 
 ACCOUNT_MAX_FAILS = 10  # 登录时候账号校验最大次数
-IP_MAX_FAILS = 10  # 登录时候账号 Ip 校验最大次数
+IP_MAX_FAILS = 10  # 登录时候和注册账号 Ip 最大限制次数
 LOCK_TIME = 60 * 30  # ip 锁定时间(30分钟)
