@@ -36,10 +36,11 @@ class UserRetrieveView(ViewSet):
 
         if serializer.is_valid():
             serializer.save()
-            logger.info(f'用户 创建用户成功：用户信息：{serializer.data}')
+            logger.info(
+                f"用户 用户创建成功: username={serializer.validated_data['username']} account={serializer.validated_data['account']}")
             return Response({
                 "status": status.HTTP_201_CREATED,
-                "message": "创建用`户成功",
+                "message": f"创建用户 {serializer.validated_data['account']} 成功",
                 "data": serializer.data
             })
         else:

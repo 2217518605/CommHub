@@ -28,13 +28,18 @@ class UserRegisterSerializer(serializers.ModelSerializer):
         return data
 
     def create(self, validated_data):
-        """ 让模型的默认值生效 """
 
+        # 移除不需要存入数据库的字段
+        validated_data.pop('password_confirm', None)
+
+        # username 为空
         if not validated_data.get('username'):
-            validated_data['username'] = None  # 触发模型默认或后续生成
-        user = User.objects.create(**validated_data)
-        return user
+            validated_data['username'] = "默认用户"
 
+        # 手动创建实例（不使用 .create()）
+        user = User(**validated_data)
+        user.save()  # 触发 save() 中的密码加密
+        return user
 
 class UserLoginSerializer(serializers.ModelSerializer):
     """ 用户登录序列化器 """
