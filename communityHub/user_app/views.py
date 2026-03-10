@@ -2,8 +2,6 @@ import logging
 import datetime
 import time
 
-from django.shortcuts import render
-from django.db import transaction
 from django.core.cache import cache
 from django.db import transaction
 from rest_framework.response import Response
