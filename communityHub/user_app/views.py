@@ -4,15 +4,16 @@ import time
 
 from django.core.cache import cache
 from django.db import transaction
+from django.shortcuts import get_object_or_404
 from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.viewsets import ViewSet
 from rest_framework_simplejwt.tokens import RefreshToken, AccessToken
 from rest_framework_simplejwt.exceptions import TokenError, InvalidToken
-from rest_framework.settings import api_settings
+from rest_framework_simplejwt.settings import api_settings
 
 from user_app.models import User
-from config.decorators.common import api_doc, api_get, api_post, api_put, api_delete
+from config.decorators.common import api_doc, api_get, api_post, api_put, api_delete, require_login
 from config.help_tools import CommonPageNumberPagination
 from user_app.serializers import UserRegisterSerializer, UserResponseSerializer, UserLoginSerializer, \
     UserUpdateSerializer, UserDeleteSerializer
@@ -30,7 +31,7 @@ class UserRetrieveView(ViewSet):
     @api_doc(tags=["用户 用户注册"], request_body=UserRegisterSerializer, response_body=UserResponseSerializer)
     @api_post
     @transaction.atomic
-    def create_user(self, request):
+    def create(self, request):
 
         # 限制一个 IP 重复注册(10次)
         ip_lock_response = check_ip_lock(request)
@@ -38,7 +39,6 @@ class UserRetrieveView(ViewSet):
             return ip_lock_response
 
         serializer = UserRegisterSerializer(data=request.data)
-
         if serializer.is_valid():
             register_data = serializer.save()
             account = serializer.validated_data['account']
@@ -58,14 +58,36 @@ class UserRetrieveView(ViewSet):
                 "data": serializer.errors
             })
 
+    @api_doc(tags=["用户 单个用户查询"], response_body=UserResponseSerializer)
+    @api_get
+    @require_login
+    def retrieve(self, request, pk):
+
+        # 防止越权查看
+        if int(pk) != request.user.pk:
+            logger.warning(f"用户 发生越权查询，用户查询失败:用户 ID ：{pk} 的用户非法")
+            return Response({
+                "status": status.HTTP_403_FORBIDDEN,
+                "message": "用户无查询权限",
+                "data": None
+            })
+
+        user = get_object_or_404(User, pk=pk)
+        return Response({
+            "status": status.HTTP_200_OK,
+            "message": "查询用户成功",
+            "data": UserResponseSerializer(user).data
+        })
+
     @api_doc(tags=["用户 用户更新"], request_body=UserUpdateSerializer, response_body=UserResponseSerializer)
     @api_put
+    @require_login
     def update(self, request, pk):
 
         logger.info(f"用户 用户更新:要求更新的用户 ID ：{pk}")
 
         # 防止不是本人的恶意修改
-        if request.user.pk != pk:
+        if request.user.pk != int(pk):
             logger.warning(f"用户 发生越权修改，用户更新失败:用户 ID ：{pk} 的用户非法")
             return Response({
                 "status": status.HTTP_403_FORBIDDEN,
@@ -80,10 +102,10 @@ class UserRetrieveView(ViewSet):
             if serializer.is_valid():
                 update_data = serializer.save()
                 logger.info(
-                    f"用户 用户更新成功: account={serializer.validated_data['account']}")
+                    f"用户 用户更新成功: account={update_data.account}")
                 return Response({
                     "status": status.HTTP_200_OK,
-                    "message": f"更新用户 {serializer.validated_data['account']} 成功",
+                    "message": f"更新用户 {update_data.account} 成功",
                     "data": UserResponseSerializer(update_data).data
                 })
             else:
@@ -103,11 +125,12 @@ class UserRetrieveView(ViewSet):
 
     @api_doc(tags=["用户 用户删除"], request_body=UserDeleteSerializer, response_body=EmptySerializer)
     @api_delete
-    def delete(self, request, pk):
+    @require_login
+    def destroy(self, request, pk):
 
         logger.info(f"用户 用户删除:要求删除的用户 ID ：{pk}")
 
-        if request.user.pk != pk:
+        if request.user.pk != int(pk):
             logger.warning(f"用户 发生越权删除，用户删除失败:用户 ID ：{pk} 的用户非法")
             return Response({
                 "status": status.HTTP_403_FORBIDDEN,
@@ -171,7 +194,7 @@ class UserLoginView(ViewSet):
             with transaction.atomic():
                 user = User.objects.select_related('organization').get(account=account)
 
-                if not user.check_password(password):
+                if not user.verify_password(password):
                     record_login_failure(request, account)
                     fail_count = cache.get(f"fail_account_{account}", 0)
                     logger.warning(f"用户 {account} 在 IP:{client_ip} 尝试登录，密码错误（第 {fail_count} 次）")
@@ -192,19 +215,20 @@ class UserLoginView(ViewSet):
                 refresh_token_lifetime = api_settings.REFRESH_TOKEN_LIFETIME
                 if remember:
                     refresh_token_lifetime = datetime.timedelta(days=30)  # 30天有效期
+                    access_token_lifetime = datetime.timedelta(days=1)  # 1天
 
                 refresh = RefreshToken.for_user(user)
-                refresh.set_exp(refresh_token_lifetime)
+                refresh.set_exp(lifetime=refresh_token_lifetime)
                 access = refresh.access_token
-                access.set_exp(access_token_lifetime)
+                access.set_exp(lifetime=access_token_lifetime)
 
                 response_data = {
                     'user_info': UserResponseSerializer(user).data,
                     'token': {
                         'access_token': str(access),
                         'refresh_token': str(refresh),
-                        'access_expire': int(access.lifetime.total_seconds()),
-                        'refresh_expire': int(refresh.lifetime.total_seconds())
+                        'access_expire': int(access_token_lifetime.total_seconds()),
+                        'refresh_expire': int(refresh_token_lifetime.total_seconds())
                     }
                 }
 

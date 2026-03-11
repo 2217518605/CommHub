@@ -1,6 +1,6 @@
 from django.db import models
 from django.core.validators import RegexValidator
-from django.contrib.auth.hashers import make_password
+from django.contrib.auth.hashers import make_password, check_password
 
 from models.base import BaseModel
 from organization_app.models import Organization
@@ -48,6 +48,11 @@ class User(BaseModel):
 
     def __str__(self):
         return f"{self.account} ({self.get_user_type_display()})"
+
+    def verify_password(self, raw_password):
+        """ 校验密码 """
+
+        return check_password(raw_password, self.password)
 
     class Meta:
         db_table = "t_user"

@@ -1,18 +1,24 @@
+import logging
+
 from rest_framework import serializers
 
 from user_app.models import User
+from organization_app.models import Organization
+
+logger = logging.getLogger(__name__)
 
 
 class UserRegisterSerializer(serializers.ModelSerializer):
     """ 用户注册序列化器 """
 
     password_confirm = serializers.CharField(write_only=True, max_length=256)
+    organization_id = serializers.IntegerField(required=False, allow_null=True, help_text="用户关联的组织ID")
 
     class Meta:
         model = User
         fields = [
-            'account', 'password', 'password_confirm',
-            'mobile', 'email', 'username'
+            'account', 'password', 'password_confirm', "birth_date", "id_card", "balance",
+            'mobile', 'email', 'username', "organization_id", "is_staff", "user_type"
         ]
         extra_kwargs = {
             'password': {'write_only': True, 'min_length': 3, 'max_length': 20},
@@ -36,23 +42,31 @@ class UserRegisterSerializer(serializers.ModelSerializer):
         if not validated_data.get('username'):
             validated_data['username'] = "默认用户"
 
+        org_id = validated_data.get('organization_id')
+        if org_id:
+            try:
+                org = Organization.objects.get(id=org_id)
+                validated_data['organization'] = org
+            except Organization.DoesNotExist:
+                raise serializers.ValidationError("组织不存在")
+
         # 手动创建实例（不使用 .create()）
         user = User(**validated_data)
         user.save()  # 触发 save() 中的密码加密
         return user
 
+
 class UserLoginSerializer(serializers.ModelSerializer):
     """ 用户登录序列化器 """
 
-    account = serializers.CharField(max_length=20, help_text="用户账号", verbose_name="用户账号", null=False,
-                                    blank=False, )
+    account = serializers.CharField(max_length=20, help_text="用户账号")
     password = serializers.CharField(write_only=True, max_length=256)
-    remember = serializers.BooleanField(default=False, help_text="记住登录状态", verbose_name="记住登录状态")
+    remember = serializers.BooleanField(default=False, help_text="记住登录状态")
 
     class Meta:
         model = User
         fields = [
-            'account', 'password',
+            'account', 'password', 'remember'
         ]
         extra_kwargs = {
             'password': {'write_only': True, 'min_length': 3, 'max_length': 20},

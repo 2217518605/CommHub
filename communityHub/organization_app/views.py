@@ -25,7 +25,7 @@ class OrganizationListView(ViewSet):
     EXCEL_MIME_TYPE = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
     EXPORT_DIR_NAME = 'export_data'
 
-    @api_doc(tag=["组织 获取组织列表"], response_body=OrganizationResponseSerializer)
+    @api_doc(tags=["组织 获取组织列表"], response_body=OrganizationResponseSerializer)
     @api_post
     def list(self, request, is_export=False):
         try:
@@ -82,7 +82,7 @@ class OrganizationListView(ViewSet):
                 'data': None
             })
 
-    @api_doc(tag=["组织 组织列表导出"], response_body=EmptySerializer)
+    @api_doc(tags=["组织 组织列表导出"], response_body=EmptySerializer)
     @api_post
     def list_export(self, request):
         try:
@@ -100,7 +100,7 @@ class OrganizationListView(ViewSet):
                 'data': None
             })
 
-    @api_doc(tag=["组织 组织列表文件导出下载"], response_body=EmptySerializer)
+    @api_doc(tags=["组织 组织列表文件导出下载"], response_body=EmptySerializer)
     @api_post
     def list_download(self, request, file_name):
         try:
@@ -145,7 +145,7 @@ class OrganizationListView(ViewSet):
 
 class OrganizationRetrieveView(ViewSet):
 
-    @api_doc(tag=["组织 获取单个组织信息"], response_body=OrganizationResponseSerializer)
+    @api_doc(tags=["组织 获取单个组织信息"], response_body=OrganizationResponseSerializer)
     @api_get
     def retrieve(self, request, pk):
         org = get_object_or_404(Organization, pk=pk)
@@ -157,7 +157,7 @@ class OrganizationRetrieveView(ViewSet):
             "data": serializer_data.data
         })
 
-    @api_doc(tag=["组织 社区组织注册"], request_body=OrganizationRequestSerializer,
+    @api_doc(tags=["组织 社区组织注册"], request_body=OrganizationRequestSerializer,
              response_body=OrganizationResponseSerializer)
     @api_post
     def create(self, request):
@@ -190,7 +190,7 @@ class OrganizationRetrieveView(ViewSet):
                 'data': None
             })
 
-    @api_doc(tag=["组织 社区组织信息更新"], request_body=OrganizationUpdateSerializer,
+    @api_doc(tags=["组织 社区组织信息更新"], request_body=OrganizationUpdateSerializer,
              response_body=OrganizationResponseSerializer)
     @api_put
     def update(self, request, pk):
@@ -218,7 +218,7 @@ class OrganizationRetrieveView(ViewSet):
                 'data': None
             })
 
-    @api_doc(tag=["组织 删除单个组织"], request_body=OrganizationDeleteSerializer, response_body=EmptySerializer)
+    @api_doc(tags=["组织 删除单个组织"], request_body=OrganizationDeleteSerializer, response_body=EmptySerializer)
     @api_delete
     def destroy(self, request, pk):
         try:

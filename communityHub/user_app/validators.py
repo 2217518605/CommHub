@@ -45,7 +45,7 @@ def check_ip_lock(request):
             'data': None
         })
 
-    if register_count > settings.IP_MAX_REGISTERS:
+    if register_count > settings.IP_MAX_FAILS:
         logger.info(f'用户 IP: {client_ip} 注册用户尝试过于频繁，请稍后 {settings.LOCK_TIME // 60} 分钟后再试')
         return Response({
             'status': status.HTTP_429_TOO_MANY_REQUESTS,

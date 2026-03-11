@@ -70,15 +70,23 @@ def require_login(func):
         else:
             request = args[0]  # 方法
 
-        token_header = request.META.get('HTTP_AUTHORIZATION')
-        if not token_header or token_header.startswith('Bearer') is False:
+        token_header = (
+                getattr(request, "headers", {}).get("Authorization")
+                or request.META.get("HTTP_AUTHORIZATION")
+                or request.META.get("Authorization")
+        )
+        if not token_header:
             return Response({
                 'code': 401,
                 'msg': '请先登录',
                 'data': None
             })
 
-        token_ = token_header.split(' ')[1]  # 去除 Bearer
+        parts = token_header.split()
+        if len(parts) == 2 and parts[0].lower() == "bearer":
+            token_ = parts[1]
+        else:
+            token_ = token_header
         jwt_auth = BlacklistJWTAuthentication()  # 验证令牌有效与否
         try:
             validate_token = jwt_auth.get_validated_token(token_)  # 校验签名和过期时间
