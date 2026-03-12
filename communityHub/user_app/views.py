@@ -11,6 +11,8 @@ from rest_framework.viewsets import ViewSet
 from rest_framework_simplejwt.tokens import RefreshToken, AccessToken
 from rest_framework_simplejwt.exceptions import TokenError, InvalidToken
 from rest_framework_simplejwt.settings import api_settings
+from rest_framework.permissions import IsAuthenticated, AllowAny
+from rest_framework.decorators import permission_classes as drf_permission_classes
 
 from user_app.models import User
 from config.decorators.common import api_doc, api_get, api_post, api_put, api_delete, require_login
@@ -27,9 +29,11 @@ logger = logging.getLogger(__name__)
 
 
 class UserRetrieveView(ViewSet):
+    permission_classes = [IsAuthenticated]  # 登录验证
 
     @api_doc(tags=["用户 用户注册"], request_body=UserRegisterSerializer, response_body=UserResponseSerializer)
     @api_post
+    @drf_permission_classes([AllowAny])  # 放开权限
     @transaction.atomic
     def create(self, request):
 
@@ -60,7 +64,6 @@ class UserRetrieveView(ViewSet):
 
     @api_doc(tags=["用户 单个用户查询"], response_body=UserResponseSerializer)
     @api_get
-    @require_login
     def retrieve(self, request, pk):
 
         # 防止越权查看
@@ -81,7 +84,6 @@ class UserRetrieveView(ViewSet):
 
     @api_doc(tags=["用户 用户更新"], request_body=UserUpdateSerializer, response_body=UserResponseSerializer)
     @api_put
-    @require_login
     def update(self, request, pk):
 
         logger.info(f"用户 用户更新:要求更新的用户 ID ：{pk}")
@@ -125,7 +127,6 @@ class UserRetrieveView(ViewSet):
 
     @api_doc(tags=["用户 用户删除"], request_body=UserDeleteSerializer, response_body=EmptySerializer)
     @api_delete
-    @require_login
     def destroy(self, request, pk):
 
         logger.info(f"用户 用户删除:要求删除的用户 ID ：{pk}")

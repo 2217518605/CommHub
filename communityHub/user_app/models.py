@@ -54,6 +54,18 @@ class User(BaseModel):
 
         return check_password(raw_password, self.password)
 
+    @property
+    def is_authenticated(self):
+        """ 模拟认证 """
+
+        return True
+
+    @property
+    def is_anonymous(self):
+        """ 模拟匿名 """
+
+        return False
+
     class Meta:
         db_table = "t_user"
         verbose_name = "用户"

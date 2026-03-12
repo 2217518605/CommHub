@@ -1,11 +1,11 @@
-@access_token = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoiYWNjZXNzIiwiZXhwIjoxNzczMzMwMTAzLCJpYXQiOjE3NzMyNDM3MDMsImp0aSI6IjE5YTNkMjhlOWFhMDRkMDdhNjM1NThlOWQ2Nzg4ZDkzIiwidXNlcl9pZCI6IjQifQ.FymH8a4UyTmMTH70WzENbQpKUZyXEustNKzJ8Tprt0c
+@access_token = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoiYWNjZXNzIiwiZXhwIjoxNzczNDExNjI2LCJpYXQiOjE3NzMzMjUyMjYsImp0aSI6IjIxZmFmODNmODAxNDQ0OTQ4NmYxMjg0OTE2ODNjMTM0IiwidXNlcl9pZCI6IjUifQ.BWfqMRprNtxzqH15BW7hPFcl079G_458H-hZf5Ic7Pk
 
 ### 用户登录
 POST http://localhost:8000/user/user_login/
 Content-Type: application/json
 
 {
-  "account": "2217518615",
+  "account": "2217518715",
   "password": "123456",
   "remember": true
 }
@@ -33,7 +33,7 @@ Content-Type: application/json
 }
 
 ### 获取用户信息
-GET http://localhost:8000/user/user_retrieve/4/
+GET http://localhost:8000/user/user_retrieve/5/
 Authorization: Bearer {{access_token}}
 
 ### 更新用户信息

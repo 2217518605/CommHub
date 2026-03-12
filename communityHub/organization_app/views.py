@@ -7,6 +7,8 @@ from django.shortcuts import get_object_or_404
 from rest_framework.viewsets import ViewSet
 from rest_framework.response import Response
 from rest_framework import status
+from rest_framework.permissions import IsAdminUser
+from rest_framework.decorators import permission_classes
 from openpyxl import workbook
 
 from config.decorators.common import api_doc, api_get, api_post, api_put, api_delete
@@ -20,6 +22,7 @@ logger = logging.getLogger(__name__)
 
 
 class OrganizationListView(ViewSet):
+    permissions = [IsAdminUser]
     pagination_class = CommonPageNumberPagination
     # application/vnd.openxmlformats-officedocument.spreadsheetml.sheet 是 .xlsx 格式 Excel 文件的标准 MIME 类型
     EXCEL_MIME_TYPE = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
