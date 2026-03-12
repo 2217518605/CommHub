@@ -1,0 +1,32 @@
+### 创建组织
+POST http://localhost:8000/organization/organization_create/
+Content-type: application/json
+
+{
+  "org_name": "组织4",
+  "contact_person": ["张三", "李四"],
+  "contact_phone": "13429937154",
+  "contact_email": "2215658603@qq.com",
+  "address": "上海",
+  "description": "这是创建的第一个组织"
+}
+
+### 获取组织列表
+GET http://localhost:8000/organization/organization_list/
+
+### 修改组织信息
+PUT http://localhost:8000/organization/organization_retrieve/1/
+Content-type: application/json
+
+{
+  "org_name": "组织1",
+  "contact_person": ["张三"],
+  "contact_phone": "13429937154",
+  "contact_email": "2215658603@qq.com",
+  "address": "深圳",
+  "description": "这是创建的第一个组织"
+}
+
+
+### 删除组织
+DELETE http://localhost:8000/organization/organization_retrieve/5/

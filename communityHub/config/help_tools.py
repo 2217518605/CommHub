@@ -2,25 +2,26 @@ import logging
 
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.response import Response
-from ipware import get_client_ip
-
+from rest_framework.views import exception_handler
+from rest_framework import status
 
 logger = logging.getLogger(__name__)
+
 
 class CommonPageNumberPagination(PageNumberPagination):
     """
     通用分页器
     """
-    page_size = 10 #  每页显示的条数
-    max_page_size = 100 # 最大每页显示的条数
-    page_query_param = "page" # 页码参数名
-    page_size_query_param = "page_size" # 每页显示的条数参数名
+    page_size = 10  # 每页显示的条数
+    max_page_size = 100  # 最大每页显示的条数
+    page_query_param = "page"  # 页码参数名
+    page_size_query_param = "page_size"  # 每页显示的条数参数名
 
     def get_paginated_response(self, data):
         """ 返回分页数据信息 """
         return Response({
-            'code': 200,
-            'msg': '成功',
+            'status': status.HTTP_200_OK,
+            'message': '成功',
             'data': {
                 'total': self.page.paginator.count,
                 'page_size': self.get_page_size(self.request),
@@ -30,17 +31,64 @@ class CommonPageNumberPagination(PageNumberPagination):
             }
         })
 
-def get_current_ip(request):
-    """ 获取当前请求的 ip 地址 """
-    client_ip, is_routable = get_client_ip(request)
-    if client_ip is None:
-        logger.warning("无法从请求中获取任何客户端 IP 地址")
-        raise ValueError("无法获取 IP")
 
-    if is_routable:
-        # 公网 IP
-        return client_ip
+def get_client_ip(request):
+    """
+    获取客户端真实 IP
+    """
+    x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
+    if x_forwarded_for:
+        ip = x_forwarded_for.split(',')[0].strip()
     else:
-        # 私有 IP
-        logger.debug(f"客户端使用私有 IP: {client_ip}")
-        return client_ip
+        ip = request.META.get('REMOTE_ADDR', 'unknown')
+    return ip
+
+
+def common_exception_handler(exc, context):
+    """
+    全局的 DRF 异常处理器
+    """
+
+    response = exception_handler(exc, context)
+
+    # 获取请求上下文
+    request = context.get('request')
+    view = context.get('view')
+
+    # 基础日志信息
+    log_extra = {
+        'user_id': getattr(request.user, 'id', None) if request else None,
+        'username': getattr(request.user, 'username', 'anonymous') if request else 'anonymous',
+        'ip': get_client_ip(request) if request else 'unknown',
+        'method': request.method if request else 'UNKNOWN',
+        'path': request.get_full_path() if request else 'UNKNOWN',
+        'view_class': view.__class__.__name__ if view else 'UnknownView'
+    }
+
+    if response is None:
+        logger.error(
+            f"【500 服务器内部错误】{exc.__class__.__name__}: {str(exc)}",
+            exc_info=True,
+            extra=log_extra
+        )
+
+        return Response(
+            {"detail": "服务器内部错误，请稍后再试"},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+        
+    if response.status_code >= 400:
+        if response.status_code == 400:
+            logger.warning(f"【{response.status_code} 客户端参数格式错误】{response.data}",extra=log_extra)
+        elif response.status_code == 401:
+            logger.warning(f"【{response.status_code} 客户端未授权】{response.data}",extra=log_extra)
+        elif response.status_code == 403:
+            logger.warning(f"【{response.status_code} 客户端无权限】{response.data}",extra=log_extra)
+        elif response.status_code == 404:
+            logger.warning(f"【{response.status_code} 客户端资源不存在】{response.data}",extra=log_extra)
+        elif response.status_code == 405:
+            logger.warning(f"【{response.status_code} 客户端请求方法不支持】{response.data}",extra=log_extra)
+        elif response.status_code == 406:
+            logger.warning(f"【{response.status_code} 客户端请求格式不支持】{response.data}",extra=log_extra)
+            
+    return response
