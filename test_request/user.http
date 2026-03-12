@@ -1,0 +1,59 @@
+@access_token = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoiYWNjZXNzIiwiZXhwIjoxNzczNDExNjI2LCJpYXQiOjE3NzMzMjUyMjYsImp0aSI6IjIxZmFmODNmODAxNDQ0OTQ4NmYxMjg0OTE2ODNjMTM0IiwidXNlcl9pZCI6IjUifQ.BWfqMRprNtxzqH15BW7hPFcl079G_458H-hZf5Ic7Pk
+
+### 用户登录
+POST http://localhost:8000/user/user_login/
+Content-Type: application/json
+
+{
+  "account": "2217518715",
+  "password": "123456",
+  "remember": true
+}
+
+
+
+### 注册用户
+POST http://localhost:8000/user/user_create/
+Content-Type: application/json
+
+{
+  "username": "久孤",
+  "account": "2217518715",
+  "password": "123456",
+  "password_confirm": "123456",
+  "mobile": "13438871643",
+  "email":"2217518715@qq.com",
+  "birth_date": "2026-03-01",
+  "id_card": "440982212712175893",
+  "balance": 1000000.00,
+  "is_active": true,
+  "is_staff": true,
+  "user_type": "admin",
+  "organization_id": 1
+}
+
+### 获取用户信息
+GET http://localhost:8000/user/user_retrieve/5/
+Authorization: Bearer {{access_token}}
+
+### 更新用户信息
+PUT http://localhost:8000/user/user_retrieve/4/
+Authorization: Bearer {{access_token}}
+Content-Type: application/json
+
+{
+  "username": "久孤",
+  "account": "2217518615",
+  "password": "123456",
+  "password_confirm": "123456",
+  "mobile": "13428871643",
+  "email":"2217518615@qq.com",
+  "birth_date": "2026-03-01",
+  "id_card": "440982200712175893",
+  "balance": 1000000.00,
+  "organization_id": 1
+}
+
+### 删除用户
+DELETE http://localhost:8000/user/user_retrieve/4/
+Authorization: Bearer {{access_token}}
