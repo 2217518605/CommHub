@@ -13,13 +13,12 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 from pathlib import Path
 import os
 import logging
-from logging.handlers import RotatingFileHandler,TimedRotatingFileHandler
+from logging.handlers import RotatingFileHandler, TimedRotatingFileHandler
 from concurrent_log_handler import ConcurrentRotatingFileHandler
 from datetime import time
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
-
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
@@ -32,7 +31,6 @@ DEBUG = True
 
 ALLOWED_HOSTS = ["*"]
 
-
 # Application definition
 
 INSTALLED_APPS = [
@@ -42,19 +40,20 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    'django_filters', # 快速实现复杂的查询过滤功能
-    'rest_framework', # 快速实现 RESTful API
-    'corsheaders', # 跨域请求
+    'django_filters',  # 快速实现复杂的查询过滤功能
+    'rest_framework',  # 快速实现 RESTful API
+    'corsheaders',  # 跨域请求
     "rest_framework_simplejwt",  # 添加JWT支持
     'mptt',  # 注册 django-mptt , 用 MPTTModel 替代 Django 原生的 models.Model，自动获得树形功能
-    'drf_yasg',   # Swagger 文档
-    'models', # 基础模型
-    'organization_app', # 组织机构应用
+    'drf_yasg',  # Swagger 文档
+    'models',  # 基础模型
+    'organization_app',  # 组织机构应用
+    'user_app',  # 用户应用
 ]
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
-    'corsheaders.middleware.CorsMiddleware', # 处理跨域请求 pip install django-cors-headers
+    'corsheaders.middleware.CorsMiddleware',  # 处理跨域请求 pip install django-cors-headers
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -82,7 +81,6 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'communityHub.wsgi.application'
 
-
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
@@ -96,7 +94,6 @@ DATABASES = {
         "PORT": "3306"
     }
 }
-
 
 # Password validation
 # https://docs.djangoproject.com/en/5.2/ref/settings/#auth-password-validators
@@ -116,7 +113,6 @@ AUTH_PASSWORD_VALIDATORS = [
     },
 ]
 
-
 # Internationalization
 # https://docs.djangoproject.com/en/5.2/topics/i18n/
 
@@ -128,7 +124,6 @@ USE_I18N = True
 
 USE_TZ = False
 
-
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
 
@@ -137,12 +132,12 @@ STATIC_URL = 'static/'
 
 # 静态文件路径：
 STATICFILES_DIRS = [
-    os.path.join(BASE_DIR, "static") # 可存放多个静态文件路径
+    os.path.join(BASE_DIR, "static")  # 可存放多个静态文件路径
 ]
 
 # 媒体文件
-MEDIA_URL = 'media/' # 访问用户上传文件的 URL 前缀
-MEDIA_ROOT = BASE_DIR / 'media' # 用户上传文件的根目录
+MEDIA_URL = 'media/'  # 访问用户上传文件的 URL 前缀
+MEDIA_ROOT = BASE_DIR / 'media'  # 用户上传文件的根目录
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
@@ -151,7 +146,7 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # 静态文件路径：
 STATICFILES_DIRS = [
-    os.path.join(BASE_DIR, "static") # 可存放多个静态文件路径
+    os.path.join(BASE_DIR, "static")  # 可存放多个静态文件路径
 ]
 
 # 生产环境下静态文件的收集目录（可选，部署时使用）
@@ -176,7 +171,7 @@ STATIC_ROOT = BASE_DIR / 'collected_static'
 # CACHE_MIDDLEWARE_KEY_PREFIX = "cache" # 缓存的键的前缀
 
 # 如果是生产环境关闭全局允许（默认是 False，显式设置更安全）
-CORS_ALLOW_ALL_ORIGINS = True # 开发环境
+CORS_ALLOW_ALL_ORIGINS = True  # 开发环境
 
 # 允许的源列表
 # CORS_ALLOWED_ORIGINS = [
@@ -236,7 +231,7 @@ LOGGING = {
     },
     'handlers': {
         'console': {
-            'class': 'logging.StreamHandler', # 处理器类型：标准输出流（控制台）
+            'class': 'logging.StreamHandler',  # 处理器类型：标准输出流（控制台）
             'formatter': 'verbose',
         },
         # 'file': {
@@ -261,7 +256,7 @@ LOGGING = {
             # 'when': 'M',
             # 'interval': 1, # 1天轮转1次
             # 'atTime':time(11,51),
-            'maxBytes': 1024 * 300, # 300KB
+            'maxBytes': 1024 * 300,  # 300KB
             'backupCount': 7,  # 保留7个备份文件
             'formatter': 'verbose',  # 格式：使用 'verbose' 详细格式
             'encoding': 'utf-8',
@@ -278,7 +273,15 @@ LOGGING = {
 
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
-        'rest_framework_simplejwt.authentication.JWTAuthentication'
+        'user_app.authentication.BlacklistJWTAuthentication'
     ],
     'EXCEPTION_HANDLER': 'config.help_tools.common_exception_handler',
 }
+
+CACHE_KEY_IP_FAIL = "login_fail_ip_{}"  # 缓存登录失败的 Ip 次数
+CACHE_KEY_REGISTER = "register_ip_{}" # 缓存注册的 Ip
+CACHE_KEY_ACCOUNT_FAIL = "fail_account_{}"  # 缓存同一账号次数
+
+ACCOUNT_MAX_FAILS = 10  # 登录时候账号校验最大次数
+IP_MAX_FAILS = 10  # 登录时候和注册账号 Ip 最大限制次数
+LOCK_TIME = 60 * 30  # ip 锁定时间(30分钟)

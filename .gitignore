@@ -216,3 +216,6 @@ __marimo__/
 
 # xlsx files
 *.xlsx
+
+# json files
+*.json

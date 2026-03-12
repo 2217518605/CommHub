@@ -6,6 +6,7 @@ from models.base import BaseModel
 
 class Organization(BaseModel):
     """ 社区组织模型 """
+
     org_name = models.CharField(max_length=50, help_text="社区组织名称", verbose_name="社区组织名称",
                                 null=False, blank=False, unique=True, db_column="name")
     contact_person = models.CharField(max_length=20, help_text="组织联系人", verbose_name="组织联系人", null=False,
