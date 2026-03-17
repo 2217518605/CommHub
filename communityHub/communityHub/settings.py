@@ -49,6 +49,7 @@ INSTALLED_APPS = [
     'models',  # 基础模型
     'organization_app',  # 组织机构应用
     'user_app',  # 用户应用
+    'goods_app',  # 商品应用
 ]
 
 MIDDLEWARE = [
@@ -279,7 +280,7 @@ REST_FRAMEWORK = {
 }
 
 CACHE_KEY_IP_FAIL = "login_fail_ip_{}"  # 缓存登录失败的 Ip 次数
-CACHE_KEY_REGISTER = "register_ip_{}" # 缓存注册的 Ip
+CACHE_KEY_REGISTER = "register_ip_{}"  # 缓存注册的 Ip
 CACHE_KEY_ACCOUNT_FAIL = "fail_account_{}"  # 缓存同一账号次数
 
 ACCOUNT_MAX_FAILS = 10  # 登录时候账号校验最大次数
