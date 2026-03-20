@@ -26,10 +26,10 @@ class Goods(BaseModel):
     sold_count = models.IntegerField(verbose_name="已售数量", help_text="已售数量", default=0)
 
     class Meta:
+        db_table = "t_goods"
         verbose_name = "商品"
         verbose_name_plural = verbose_name
         indexes = [
-            models.Index(fields=['-created_time']),
             models.Index(fields=['status'])
         ]
 
@@ -50,5 +50,6 @@ class GoodsComments(BaseModel):
                                         default=1)
 
     class Meta:
+        db_table = "t_goods_comments"
         verbose_name = "用户评论"
         verbose_name_plural = verbose_name

@@ -18,7 +18,7 @@ from user_app.models import User
 from config.decorators.common import api_doc, api_get, api_post, api_put, api_delete, require_login
 from config.help_tools import CommonPageNumberPagination
 from user_app.serializers import UserRegisterSerializer, UserResponseSerializer, UserLoginSerializer, \
-    UserUpdateSerializer, UserDeleteSerializer
+    UserUpdateSerializer, UserDeleteSerializer, UserQueryByNameSerializer
 from config.serializers.base import EmptySerializer
 from organization_app.models import Organization
 from config.help_tools import get_client_ip
@@ -288,7 +288,6 @@ class UserLoginView(ViewSet):
                 logger.info(f'用户 IP {client_ip}: 用户登出成功，refresh_token 加入黑名单（剩余 {remaining_seconds}s）')
             else:
                 logger.info(f'用户 IP {client_ip}: refresh_token 已过期，无需加入黑名单')
-
             return Response({
                 'status': status.HTTP_200_OK,
                 'message': '登出成功',
@@ -309,4 +308,36 @@ class UserLoginView(ViewSet):
                 'status': status.HTTP_500_INTERNAL_SERVER_ERROR,
                 'message': '登出失败，请稍后重试',
                 'data': None
+            })
+
+
+class UserListView(ViewSet):
+    pagination_class = CommonPageNumberPagination
+    permission_classes = [IsAuthenticated]
+
+    @api_doc(tags=["用戶 通过关键词返回用户列表"], request_body=UserQueryByNameSerializer,
+             response_body=UserResponseSerializer)
+    @api_post
+    def user_query_by_name(self, request):
+
+        query_name = request.data.get("query_name") if "query_name" in request.data else None
+        try:
+            if query_name:
+                user_list = User.objects.filter(username__icontains=query_name).select_related("organization")
+            else:
+                user_list = User.objects.select_related("organization").all()
+            serializer = UserResponseSerializer(user_list,many=True)
+
+            logger.info("用户列表查询成功")
+            return Response({
+                "status": status.HTTP_200_OK,
+                "message": "用户列表查询成功",
+                "data": serializer.data
+            })
+        except Exception as e:
+            logger.error("用户列表查询失败！")
+            return Response({
+                "status": status.HTTP_400_BAD_REQUEST,
+                "message": "用户列表查询失败",
+                "data": None
             })
