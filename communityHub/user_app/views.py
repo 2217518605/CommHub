@@ -31,9 +31,15 @@ logger = logging.getLogger(__name__)
 class UserRetrieveView(ViewSet):
     permission_classes = [IsAuthenticated]  # 登录验证
 
+    def get_permissions(self):
+        """ 分开创建的权限 """
+
+        if getattr(self, "action", None) == "create":
+            return [AllowAny()]
+        return [permission() for permission in self.permission_classes]
+
     @api_doc(tags=["用户 用户注册"], request_body=UserRegisterSerializer, response_body=UserResponseSerializer)
     @api_post
-    @drf_permission_classes([AllowAny])  # 放开权限
     @transaction.atomic
     def create(self, request):
 
@@ -160,6 +166,7 @@ class UserRetrieveView(ViewSet):
 
 
 class UserLoginView(ViewSet):
+    permission_classes = [AllowAny]
 
     @api_doc(tags=["用户 用户登录"], request_body=UserLoginSerializer, response_body=UserResponseSerializer)
     @api_post
@@ -326,7 +333,7 @@ class UserListView(ViewSet):
                 user_list = User.objects.filter(username__icontains=query_name).select_related("organization")
             else:
                 user_list = User.objects.select_related("organization").all()
-            serializer = UserResponseSerializer(user_list,many=True)
+            serializer = UserResponseSerializer(user_list, many=True)
 
             logger.info("用户列表查询成功")
             return Response({

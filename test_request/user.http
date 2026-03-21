@@ -14,7 +14,6 @@ Content-Type: application/json
 
 ### 注册用户
 POST http://localhost:8000/user/user_create/
-Authorization: Bearer {{access_token}}
 Content-Type: application/json
 
 {
