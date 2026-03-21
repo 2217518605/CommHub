@@ -1,0 +1,37 @@
+@access_token = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoiYWNjZXNzIiwiZXhwIjoxNzc0MTkxMjkyLCJpYXQiOjE3NzQxMDQ4OTIsImp0aSI6ImRjMThhODE5ZjEzZDQwMTBhZTY0Nzk0ODcyNzBkZDk3IiwidXNlcl9pZCI6IjUifQ.BJqyul2kQHnAJvUoVPZ_UO4SPR1kQKaaqH0F0Twt1Cc
+
+### 获取商品信息
+GET http://localhost:8000/goods/goods_retrieve/3/
+
+
+### 创建商品
+POST http://localhost:8000/goods/goods_create/
+Authorization: Bearer {{access_token}}
+Content-Type: application/json
+
+{
+  "name": "test",
+  "price": 9999.00,
+  "number": 100,
+  "desc": "这是最新出的iphone 17 pro max",
+  "status": "pending",
+  "sold_count": 12
+}
+
+### 修改商品
+PUT http://localhost:8000/goods/goods_retrieve/2/
+Authorization: Bearer {{access_token}}
+Content-Type: application/json
+
+{
+  "name": "iqoo 15",
+  "price": 4499.00,
+  "number": 2001,
+  "desc": "这是最新出的iqoo 15",
+  "status": "normal",
+  "sold_count": 1200
+}
+
+### 删除商品
+DELETE http://localhost:8000/goods/goods_retrieve/3/
+Authorization: Bearer {{access_token}}

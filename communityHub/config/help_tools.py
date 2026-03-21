@@ -36,7 +36,7 @@ def get_client_ip(request):
     """
     获取客户端真实 IP
     """
-    x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
+    x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR') # X-Forwarded-For: <client>, <proxy1>, <proxy2>, <proxy3>
     if x_forwarded_for:
         ip = x_forwarded_for.split(',')[0].strip()
     else:
@@ -92,3 +92,10 @@ def common_exception_handler(exc, context):
             logger.warning(f"【{response.status_code} 客户端请求格式不支持】{response.data}",extra=log_extra)
             
     return response
+
+def common_response(status:int=status.HTTP_200_OK,message:str="操作成功",data:dict=None):
+    return Response({
+            "status": status,
+            "message": message,
+            "data": data
+        })

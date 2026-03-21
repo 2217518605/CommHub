@@ -13,7 +13,7 @@ from openpyxl import workbook
 
 from config.decorators.common import api_doc, api_get, api_post, api_put, api_delete
 from config.serializers.base import EmptySerializer
-from config.help_tools import CommonPageNumberPagination
+from config.help_tools import CommonPageNumberPagination,common_response
 from .serializers import OrganizationRequestSerializer, OrganizationResponseSerializer, OrganizationUpdateSerializer, \
     OrganizationDeleteSerializer
 from .models import Organization
@@ -79,29 +79,17 @@ class OrganizationListView(ViewSet):
             })
         except Exception as e:
             logger.error(f'组织 获取组织列表错误：{e}', exc_info=True)
-            return Response({
-                'status': status.HTTP_500_INTERNAL_SERVER_ERROR,
-                'message': '服务器内部错误',
-                'data': None
-            })
+            return common_response(status=status.HTTP_500_INTERNAL_SERVER_ERROR, message="服务器内部错误")  
 
     @api_doc(tags=["组织 组织列表导出"], response_body=EmptySerializer)
     @api_post
     def list_export(self, request):
         try:
             self.list(request, is_export=True)
-            return Response({
-                'status': status.HTTP_200_OK,
-                'message': '组织列表导出成功',
-                'data': None
-            })
+            return common_response(status=status.HTTP_200_OK, message="组织列表导出成功")
         except Exception as e:
             logger.error(f'组织 组织列表导出错误：{e}', exc_info=True)
-            return Response({
-                'status': status.HTTP_500_INTERNAL_SERVER_ERROR,
-                'message': '服务器内部错误',
-                'data': None
-            })
+            return common_response(status=status.HTTP_500_INTERNAL_SERVER_ERROR, message="服务器内部错误")
 
     @api_doc(tags=["组织 组织列表文件导出下载"], response_body=EmptySerializer)
     @api_post
@@ -111,11 +99,7 @@ class OrganizationListView(ViewSet):
             file_path = os.path.join(os.path.dirname(__file__), self.EXPORT_DIR_NAME, file_name)
             if not os.path.exists(file_path):
                 logger.error(f"组织 获取组织列表文件错误：文件不存在")
-                return Response({
-                    "status": status.HTTP_404_NOT_FOUND,
-                    "message": "文件不存在",
-                    "data": None
-                })
+                return common_response(status=status.HTTP_404_NOT_FOUND, message="组织列表文件不存在")
 
             try:
                 with open(file_path, 'rb') as f:
@@ -124,26 +108,14 @@ class OrganizationListView(ViewSet):
                     return response
             except PermissionError:
                 logger.error(f"组织 文件下载错误：无读取权限，路径：{file_path}")
-                return Response({
-                    "status": status.HTTP_403_FORBIDDEN,
-                    "message": "文件读取权限不足",
-                    "data": None
-                })
+                return common_response(status=status.HTTP_403_FORBIDDEN, message="文件读取失败")
             except IOError as e:
                 logger.error(f"组织 文件下载IO错误：{e}，路径：{file_path}")
-                return Response({
-                    "status": status.HTTP_500_INTERNAL_SERVER_ERROR,
-                    "message": "文件读取失败",
-                    "data": None
-                })
+                return common_response(status=status.HTTP_500_INTERNAL_SERVER_ERROR, message="文件读取失败")
 
         except Exception as e:
             logger.error(f'组织 组织数据导出文件下载错误：{e}', exc_info=True)
-            return Response({
-                'code': 500,
-                'msg': f'文件下载失败: {str(e)}',
-                'data': None
-            })
+            return common_response(status=status.HTTP_500_INTERNAL_SERVER_ERROR, message="服务器内部错误")
 
 
 class OrganizationRetrieveView(ViewSet):
@@ -154,11 +126,7 @@ class OrganizationRetrieveView(ViewSet):
         org = get_object_or_404(Organization, pk=pk)
         serializer_data = OrganizationResponseSerializer(org)
         logger.info(f'组织 获取单个组织信息成功，组织信息：{serializer_data.data}')
-        return Response({
-            "status": status.HTTP_200_OK,
-            "message": "获取组织信息成功",
-            "data": serializer_data.data
-        })
+        return common_response(status=status.HTTP_200_OK, message="获取组织信息成功", data=serializer_data.data)    
 
     @api_doc(tags=["组织 社区组织注册"], request_body=OrganizationRequestSerializer,
              response_body=OrganizationResponseSerializer)
@@ -170,28 +138,18 @@ class OrganizationRetrieveView(ViewSet):
         try:
             if Organization.objects.filter(org_name=org_name).exists():
                 logger.error(f'组织 创建组织错误：组织 {org_name} 已存在')
-                return Response({
-                    "status": 400,
-                    "message": "组织已存在",
-                    "data": {}})
+                return common_response(status=status.HTTP_400_BAD_REQUEST, message="组织已存在")
 
             params_data = OrganizationRequestSerializer(data=request.data)
             params_data.is_valid(raise_exception=True)
             params_data.save()
+            
             serializer_data = OrganizationResponseSerializer(params_data.data)
             logger.info(f'组织 创建组织成功，创建组织信息：{serializer_data.data}')
-            return Response({
-                "status": status.HTTP_200_OK,
-                "message": "创建组织成功",
-                "data": serializer_data.data
-            })
+            return common_response(status=status.HTTP_200_OK, message="创建组织成功", data=serializer_data.data)
         except Exception as e:
             logger.error(f'组织 创建组织错误：{e}', exc_info=True)
-            return Response({
-                'status': status.HTTP_500_INTERNAL_SERVER_ERROR,
-                'message': '服务器内部错误',
-                'data': None
-            })
+            return common_response(status=status.HTTP_500_INTERNAL_SERVER_ERROR, message="服务器内部错误")
 
     @api_doc(tags=["组织 社区组织信息更新"], request_body=OrganizationUpdateSerializer,
              response_body=OrganizationResponseSerializer)
@@ -207,19 +165,11 @@ class OrganizationRetrieveView(ViewSet):
 
             logger.info(f'组织 单个组织更新成功，更新组织信息：{serializer.data}')
             response_serializer = OrganizationResponseSerializer(org)
-            return Response({
-                'status': status.HTTP_200_OK,
-                'message': '社区组织更新成功',
-                'data': response_serializer.data
-            })
+            return common_response(status=status.HTTP_200_OK, message="更新组织信息成功", data=response_serializer.data)
 
         except Exception as e:
             logger.error(f'组织 单个组织更新错误：{e}', exc_info=True)
-            return Response({
-                'status': status.HTTP_500_INTERNAL_SERVER_ERROR,
-                'message': '服务器内部错误',
-                'data': None
-            })
+            return common_response(status=status.HTTP_500_INTERNAL_SERVER_ERROR, message="服务器内部错误")
 
     @api_doc(tags=["组织 删除单个组织"], request_body=OrganizationDeleteSerializer, response_body=EmptySerializer)
     @api_delete
@@ -227,24 +177,13 @@ class OrganizationRetrieveView(ViewSet):
         try:
             org = Organization.objects.get(pk=pk)
             org_name = org.org_name
+            
             org.delete()
             logger.info(f'组织 单个组织删除成功，ID: {pk}，删除组织名称：{org_name}')
-            return Response({
-                'status': status.HTTP_204_NO_CONTENT,
-                'message': '删除成功',
-                'data': None
-            })
+            return common_response(status=status.HTTP_200_OK, message="删除组织成功")
         except Organization.DoesNotExist:
             logger.warning(f'组织 删除失败，组织不存在，ID: {pk}')
-            return Response({
-                'status': status.HTTP_404_NOT_FOUND,
-                'message': f'组织不存在，ID: {pk}',
-                'data': None
-            })
+            return common_response(status=status.HTTP_404_NOT_FOUND, message="组织不存在")
         except Exception as e:
             logger.error(f'组织 单个组织删除错误：{e}', exc_info=True)
-            return Response({
-                'status': status.HTTP_500_INTERNAL_SERVER_ERROR,
-                'message': '服务器内部错误',
-                'data': None
-            })
+            return common_response(status=status.HTTP_500_INTERNAL_SERVER_ERROR, message="服务器内部错误")

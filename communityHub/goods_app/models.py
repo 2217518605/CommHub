@@ -9,7 +9,7 @@ class Goods(BaseModel):
     """ 商品模型 """
 
     organization = models.ForeignKey(Organization, on_delete=models.CASCADE, verbose_name="所属组织",
-                                     help_text="所属组织", blank=False, null=False,related_name="org_goods")
+                                     help_text="所属组织", blank=False, null=False, related_name="org_goods")
     user = models.ForeignKey(User, on_delete=models.CASCADE, verbose_name="发布者", related_name="user_goods")
     name = models.CharField(max_length=50, verbose_name="商品名称", help_text="商品名称", blank=False, null=False)
     price = models.DecimalField(max_digits=7, decimal_places=2, verbose_name="商品价格", help_text="商品价格",
@@ -43,11 +43,10 @@ class GoodsComments(BaseModel):
     user = models.ForeignKey(User, verbose_name="用户", help_text="用户", blank=False, null=False,
                              on_delete=models.CASCADE,
                              related_name='user_comments')
+    parents = models.ForeignKey('self', verbose_name="商品的父评论", help_text="商品的父评论", blank=True, null=True,
+                                on_delete=models.CASCADE, related_name='replies')
     comment = models.TextField(verbose_name="评论", help_text="评论", blank=False, null=False)
-    like = models.IntegerField(verbose_name="点赞数", help_text="点赞数", blank=False, null=False, default=0)
-    reply = models.TextField(verbose_name="回复", help_text="回复", blank=True, null=True)
-    comment_level = models.IntegerField(verbose_name="评论层级", help_text="评论层级", blank=False, null=False,
-                                        default=1)
+    like_num = models.IntegerField(verbose_name="点赞数", help_text="点赞数", blank=False, null=False, default=0)
 
     class Meta:
         db_table = "t_goods_comments"
