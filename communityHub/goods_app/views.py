@@ -111,6 +111,7 @@ class GoodsListViewSet(ViewSet):
         else:
             goods_list = Goods.objects.select_related("user", "organization").all()
         logger.info(f'商品 获取成功,商品条数为：{goods_list.count()}')
+
         paginator = self.pagination_class()
         pagination_data = paginator.paginate_queryset(goods_list, request)
 
