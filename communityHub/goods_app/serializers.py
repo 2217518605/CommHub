@@ -79,7 +79,7 @@ class GoodsGetDeleteSerializer(serializers.ModelSerializer):
         fields = ["id"]
 
 
-class GoodsQeuryBYNameSerializer(serializers.ModelSerializer):
+class GoodsQueryBYNameSerializer(serializers.ModelSerializer):
     """ 根据商品名称查询商品通用序列化器 """
 
     query_name = serializers.CharField(help_text="商品名称关键字", allow_blank=True, allow_null=True)

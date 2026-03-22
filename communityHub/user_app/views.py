@@ -1,8 +1,8 @@
 import logging
-import datetime
 import time
 
 from django.core.cache import cache
+from django.utils import timezone
 from django.db import transaction
 from django.shortcuts import get_object_or_404
 from rest_framework import status
@@ -11,7 +11,6 @@ from rest_framework_simplejwt.tokens import RefreshToken, AccessToken
 from rest_framework_simplejwt.exceptions import TokenError, InvalidToken
 from rest_framework_simplejwt.settings import api_settings
 from rest_framework.permissions import IsAuthenticated, AllowAny
-from rest_framework.decorators import permission_classes as drf_permission_classes
 
 from user_app.models import User
 from config.decorators.common import api_doc, api_get, api_post, api_put, api_delete, require_login
@@ -20,21 +19,21 @@ from user_app.serializers import UserRegisterSerializer, UserResponseSerializer,
     UserUpdateSerializer, UserDeleteSerializer, UserQueryByNameSerializer
 from config.serializers.base import EmptySerializer
 from organization_app.models import Organization
-from config.help_tools import get_client_ip,common_response
+from config.help_tools import get_client_ip, common_response
 from user_app.validators import check_ip_lock, check_account_lock, record_login_failure, clear_login_success_cache, \
     record_ip_register
+from config.authentication import IsAdmin, IsSuperAdmin, IsPublic, IsCommonUser
 
 logger = logging.getLogger(__name__)
 
 
 class UserRetrieveView(ViewSet):
-    permission_classes = [IsAuthenticated]  # 登录验证
+    permission_classes = [IsCommonUser]
 
     def get_permissions(self):
-        """ 放开创建的权限 """
-
-        if getattr(self, "action", None) == "create":
-            return [AllowAny()]
+        """ 注册放开权限，其余需要登录 """
+        if self.action == "create":
+            return [IsPublic()]
         return [permission() for permission in self.permission_classes]
 
     @api_doc(tags=["用户 用户注册"], request_body=UserRegisterSerializer, response_body=UserResponseSerializer)
@@ -53,11 +52,13 @@ class UserRetrieveView(ViewSet):
             account = serializer.validated_data['account']
             logger.info(f"用户 用户创建成功: account={account}")
             record_ip_register(request)  # 记录 IP 注册次数
-            return common_response(status=status.HTTP_200_OK, message="用户 创建用户成功", data=UserResponseSerializer(register_data).data)
+            return common_response(status=status.HTTP_200_OK, message="用户 创建用户成功",
+                                   data=UserResponseSerializer(register_data).data)
         else:
             logger.error(f'用户 创建用户错误：{serializer.errors}')
             record_ip_register(request)  # 记录 IP 注册次数
-            return common_response(status=status.HTTP_400_BAD_REQUEST, message="用户 创建用户失败", data=serializer.errors)
+            return common_response(status=status.HTTP_400_BAD_REQUEST, message="用户 创建用户失败",
+                                   data=serializer.errors)
 
     @api_doc(tags=["用户 单个用户查询"], response_body=UserResponseSerializer)
     @api_get
@@ -69,7 +70,8 @@ class UserRetrieveView(ViewSet):
             return common_response(status=status.HTTP_403_FORBIDDEN, message="用户 非法查询")
 
         user = get_object_or_404(User, pk=pk)
-        return common_response(status=status.HTTP_200_OK, message="用户 查询成功", data=UserResponseSerializer(user).data)  
+        return common_response(status=status.HTTP_200_OK, message="用户 查询成功",
+                               data=UserResponseSerializer(user).data)
 
     @api_doc(tags=["用户 用户更新"], request_body=UserUpdateSerializer, response_body=UserResponseSerializer)
     @api_put
@@ -80,7 +82,7 @@ class UserRetrieveView(ViewSet):
         # 防止不是本人的恶意修改
         if request.user.pk != int(pk):
             logger.warning(f"用户 发生越权修改，用户更新失败:用户 ID ：{pk} 的用户非法")
-            return common_response(status=status.HTTP_403_FORBIDDEN, message="用户 非法更新")   
+            return common_response(status=status.HTTP_403_FORBIDDEN, message="用户 非法更新")
 
         try:
             user = User.objects.select_related("organization").get(pk=pk)
@@ -90,14 +92,16 @@ class UserRetrieveView(ViewSet):
                 update_data = serializer.save()
                 logger.info(
                     f"用户 用户更新成功: account={update_data.account}")
-                return common_response(status=status.HTTP_200_OK, message=f"用户 {update_data.account} 更新成功", data=UserResponseSerializer(update_data).data)
+                return common_response(status=status.HTTP_200_OK, message=f"用户 {update_data.account} 更新成功",
+                                       data=UserResponseSerializer(update_data).data)
             else:
                 logger.error(f'用户 用户更新错误：{serializer.errors}')
-                return common_response(status=status.HTTP_400_BAD_REQUEST, message="用户 更新失败", data=serializer.errors)
+                return common_response(status=status.HTTP_400_BAD_REQUEST, message="用户 更新失败",
+                                       data=serializer.errors)
 
         except User.DoesNotExist:
             logger.warning(f"用户 用户更新失败:用户 ID ：{pk} 不存在")
-            return common_response(status=status.HTTP_404_NOT_FOUND, message="用户 不存在")  
+            return common_response(status=status.HTTP_404_NOT_FOUND, message="用户 不存在")
 
     @api_doc(tags=["用户 用户删除"], request_body=UserDeleteSerializer, response_body=EmptySerializer)
     @api_delete
@@ -122,7 +126,14 @@ class UserRetrieveView(ViewSet):
 
 
 class UserLoginView(ViewSet):
-    permission_classes = [AllowAny]
+    permission_classes = [IsCommonUser]
+
+    def get_permissions(self):
+        """ 放开登录的权限 """
+
+        if self.action == "user_login":
+            return [IsPublic()]
+        return [permission() for permission in self.permission_classes]
 
     @api_doc(tags=["用户 用户登录"], request_body=UserLoginSerializer, response_body=UserResponseSerializer)
     @api_post
@@ -138,7 +149,8 @@ class UserLoginView(ViewSet):
         serializer = UserLoginSerializer(data=request.data)
         if not serializer.is_valid():
             logger.warning(f"用户登录失败 - IP: {client_ip} 登录参数校验失败：{serializer.errors}")
-            return common_response(status=status.HTTP_400_BAD_REQUEST, message="用户 登录参数校验失败", data=serializer.errors)
+            return common_response(status=status.HTTP_400_BAD_REQUEST, message="用户 登录参数校验失败",
+                                   data=serializer.errors)
 
         account = serializer.validated_data['account']
         password = serializer.validated_data['password']
@@ -164,7 +176,7 @@ class UserLoginView(ViewSet):
                 # 清楚失败的缓存
                 clear_login_success_cache(account)
 
-                user.last_login = datetime.datetime.now()
+                user.last_login = timezone.now()
                 user.save(update_fields=['last_login'])
 
                 access_token_lifetime = api_settings.ACCESS_TOKEN_LIFETIME
@@ -206,7 +218,7 @@ class UserLoginView(ViewSet):
         raw_access_token = request.data.get('access_token')
         if not raw_refresh_token:
             logger.warning(f'用户 refresh_token不能为空')
-            return common_response(status=status.HTTP_400_BAD_REQUEST, message="用户 refresh_token不能为空")    
+            return common_response(status=status.HTTP_400_BAD_REQUEST, message="用户 refresh_token不能为空")
 
         if raw_access_token:
             try:
@@ -243,7 +255,7 @@ class UserLoginView(ViewSet):
 
 class UserListView(ViewSet):
     pagination_class = CommonPageNumberPagination
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsCommonUser]
 
     @api_doc(tags=["用戶 通过关键词返回用户列表"], request_body=UserQueryByNameSerializer,
              response_body=UserResponseSerializer)
@@ -256,10 +268,17 @@ class UserListView(ViewSet):
                 user_list = User.objects.filter(username__icontains=query_name).select_related("organization")
             else:
                 user_list = User.objects.select_related("organization").all()
-            serializer = UserResponseSerializer(user_list, many=True)
+
+            paginator = self.pagination_class()
+            pagination_data = paginator.paginate_queryset(user_list, request)
+            serializer = UserResponseSerializer(pagination_data, many=True)
 
             logger.info("用户列表查询成功")
-            return common_response(status=status.HTTP_200_OK, message="用户列表查询成功", data=serializer.data)
+            return paginator.get_paginated_response({
+                "status": status.HTTP_200_OK,
+                "message": "用户列表查询成功",
+                "data": serializer.data
+            })
         except Exception as e:
             logger.error("用户列表查询失败！")
             return common_response(status=status.HTTP_400_BAD_REQUEST, message="用户列表查询失败")

@@ -13,16 +13,17 @@ from openpyxl import workbook
 
 from config.decorators.common import api_doc, api_get, api_post, api_put, api_delete
 from config.serializers.base import EmptySerializer
-from config.help_tools import CommonPageNumberPagination,common_response
+from config.help_tools import CommonPageNumberPagination, common_response
 from .serializers import OrganizationRequestSerializer, OrganizationResponseSerializer, OrganizationUpdateSerializer, \
     OrganizationDeleteSerializer
 from .models import Organization
+from config.authentication import IsPublic, IsCommonUser, IsAdmin, IsSuperAdmin
 
 logger = logging.getLogger(__name__)
 
 
 class OrganizationListView(ViewSet):
-    permissions = [IsAdminUser]
+    permission_classes = [IsAdmin | IsSuperAdmin | IsCommonUser]
     pagination_class = CommonPageNumberPagination
     # application/vnd.openxmlformats-officedocument.spreadsheetml.sheet 是 .xlsx 格式 Excel 文件的标准 MIME 类型
     EXCEL_MIME_TYPE = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
@@ -79,7 +80,7 @@ class OrganizationListView(ViewSet):
             })
         except Exception as e:
             logger.error(f'组织 获取组织列表错误：{e}', exc_info=True)
-            return common_response(status=status.HTTP_500_INTERNAL_SERVER_ERROR, message="服务器内部错误")  
+            return common_response(status=status.HTTP_500_INTERNAL_SERVER_ERROR, message="服务器内部错误")
 
     @api_doc(tags=["组织 组织列表导出"], response_body=EmptySerializer)
     @api_post
@@ -120,13 +121,20 @@ class OrganizationListView(ViewSet):
 
 class OrganizationRetrieveView(ViewSet):
 
+    def get_permissions(self):
+        """ 放开查看的权限 """
+
+        if self.action == "retrieve":
+            return [IsCommonUser()]
+        return [IsAdmin() | IsSuperAdmin()]
+
     @api_doc(tags=["组织 获取单个组织信息"], response_body=OrganizationResponseSerializer)
     @api_get
     def retrieve(self, request, pk):
         org = get_object_or_404(Organization, pk=pk)
         serializer_data = OrganizationResponseSerializer(org)
         logger.info(f'组织 获取单个组织信息成功，组织信息：{serializer_data.data}')
-        return common_response(status=status.HTTP_200_OK, message="获取组织信息成功", data=serializer_data.data)    
+        return common_response(status=status.HTTP_200_OK, message="获取组织信息成功", data=serializer_data.data)
 
     @api_doc(tags=["组织 社区组织注册"], request_body=OrganizationRequestSerializer,
              response_body=OrganizationResponseSerializer)
@@ -143,7 +151,7 @@ class OrganizationRetrieveView(ViewSet):
             params_data = OrganizationRequestSerializer(data=request.data)
             params_data.is_valid(raise_exception=True)
             params_data.save()
-            
+
             serializer_data = OrganizationResponseSerializer(params_data.data)
             logger.info(f'组织 创建组织成功，创建组织信息：{serializer_data.data}')
             return common_response(status=status.HTTP_200_OK, message="创建组织成功", data=serializer_data.data)
@@ -177,7 +185,7 @@ class OrganizationRetrieveView(ViewSet):
         try:
             org = Organization.objects.get(pk=pk)
             org_name = org.org_name
-            
+
             org.delete()
             logger.info(f'组织 单个组织删除成功，ID: {pk}，删除组织名称：{org_name}')
             return common_response(status=status.HTTP_200_OK, message="删除组织成功")

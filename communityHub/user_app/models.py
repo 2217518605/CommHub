@@ -33,8 +33,8 @@ class User(BaseModel):
     balance = models.DecimalField(max_digits=10, decimal_places=2, default=0.00, verbose_name='账户余额',
                                   help_text="账户余额")
     user_type = models.CharField(max_length=10,
-                                 choices=[('resident', '居民'), ('admin', '社区管理员'), ('vendor', '商户')],
-                                 default='resident', verbose_name='用户类型')
+                                 choices=[('resident', '居民'), ("seller", "商户"), ('admin', '社区管理员'),
+                                          ('super_admin', '超管')], default='resident', verbose_name='用户类型')
     is_active = models.BooleanField(default=True, verbose_name='是否激活', help_text='False=禁用/拉黑账号')
     is_staff = models.BooleanField(default=False, verbose_name='是否为管理员', help_text="是否为管理员")
     last_login = models.DateTimeField(blank=True, null=True, verbose_name='最后登录时间')
