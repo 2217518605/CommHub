@@ -14,7 +14,7 @@ class GoodsCommonSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Goods
-        exclude = ("user","organization")
+        exclude = ("user", "organization")
         extra_kwargs = {
             "user": {"write_only": True},
             "organization": {"write_only": True}
@@ -79,7 +79,7 @@ class GoodsGetDeleteSerializer(serializers.ModelSerializer):
         fields = ["id"]
 
 
-class GoodsQueryBYNameSerializer(serializers.ModelSerializer):
+class GoodsQueryByNameSerializer(serializers.ModelSerializer):
     """ 根据商品名称查询商品通用序列化器 """
 
     query_name = serializers.CharField(help_text="商品名称关键字", allow_blank=True, allow_null=True)
@@ -111,11 +111,13 @@ class GoodsCommentsResponseSerializer(serializers.ModelSerializer):
             "user": {"write_only": True}
         }
 
+
 class GoodsCommentsRetrieveSerializer(serializers.ModelSerializer):
-    """ 商品评论（获取单个和删除单个的通用序列化器） """
+    """ 获取商品评论 """
+
+    show_reply_comments = serializers.BooleanField(help_text="是否显示回复的评论", default=False)
+    goods_id = serializers.IntegerField(help_text="商品ID", write_only=True, required=True)
 
     class Meta:
         model = GoodsComments
-        fields = ["id"]
-        
-        
+        fields = ["id", "show_reply_comments", "goods_id"]

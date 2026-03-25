@@ -32,7 +32,7 @@ class User(BaseModel):
             code='invalid_id_card')])
     balance = models.DecimalField(max_digits=10, decimal_places=2, default=0.00, verbose_name='账户余额',
                                   help_text="账户余额")
-    user_type = models.CharField(max_length=10,
+    user_type = models.CharField(max_length=100,
                                  choices=[('resident', '居民'), ("seller", "商户"), ('admin', '社区管理员'),
                                           ('super_admin', '超管')], default='resident', verbose_name='用户类型')
     is_active = models.BooleanField(default=True, verbose_name='是否激活', help_text='False=禁用/拉黑账号')
@@ -70,6 +70,10 @@ class User(BaseModel):
         db_table = "t_user"
         verbose_name = "用户"
         verbose_name_plural = verbose_name
+        indexes = [
+            models.Index(fields=["-create_time"]),
+            models.Index(fields=["username"])
+        ]
 
 
 class UserLoginLog(BaseModel):
@@ -78,10 +82,11 @@ class UserLoginLog(BaseModel):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="user_login_log", verbose_name="用户登录日志")
     login_time = models.DateTimeField(verbose_name='登录时间', help_text="登录时间", auto_now_add=True)
     login_ip = models.CharField(max_length=50, verbose_name="登录的ip", help_text="登录的ip")
-    login_status = models.BooleanField(default=True, verbose_name='登录状态', help_text='True=成功，False=失败')
-    login_type = models.CharField(max_length=10,
-                                  choices=[('pc', '电脑端'), ('mobile', '移动端'), ('admin', '后台管理端')],
-                                  default='mobile', verbose_name='登录端类型')
+    login_status = models.CharField(verbose_name='登录|登出状态', help_text="登录|登出状态", max_length=20)
+    login_type = models.CharField(max_length=20,
+                                  choices=[('normal_in', '正常登录'), ('normal_out', '正常登出'),
+                                           ('normal_in_error', '登录失败'), ("normal_out_error", "登出失败")],
+                                  verbose_name='登录类型')
 
     class Meta:
         db_table = "t_user_login_log"

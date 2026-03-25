@@ -33,7 +33,7 @@ class OrganizationListView(ViewSet):
     @api_post
     def list(self, request, is_export=False):
         try:
-            org_list = Organization.objects.all().order_by('-id')
+            org_list = Organization.objects.all().order_by('-create_time', '-id')
             logger.info(f'组织 获取组织列表成功，共获取 {org_list.count()} 条数据')
             paginator = self.pagination_class()
             pagination_data = paginator.paginate_queryset(org_list, request)
@@ -83,7 +83,7 @@ class OrganizationListView(ViewSet):
             return common_response(status=status.HTTP_500_INTERNAL_SERVER_ERROR, message="服务器内部错误")
 
     @api_doc(tags=["组织 组织列表导出"], response_body=EmptySerializer)
-    @api_post
+    @api_get
     def list_export(self, request):
         try:
             self.list(request, is_export=True)

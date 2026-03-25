@@ -1,5 +1,6 @@
 import logging
 import time
+import datetime
 
 from django.core.cache import cache
 from django.utils import timezone
@@ -12,7 +13,7 @@ from rest_framework_simplejwt.exceptions import TokenError, InvalidToken
 from rest_framework_simplejwt.settings import api_settings
 from rest_framework.permissions import IsAuthenticated, AllowAny
 
-from user_app.models import User
+from user_app.models import User,UserLoginLog
 from config.decorators.common import api_doc, api_get, api_post, api_put, api_delete, require_login
 from config.help_tools import CommonPageNumberPagination
 from user_app.serializers import UserRegisterSerializer, UserResponseSerializer, UserLoginSerializer, \
@@ -149,6 +150,8 @@ class UserLoginView(ViewSet):
         serializer = UserLoginSerializer(data=request.data)
         if not serializer.is_valid():
             logger.warning(f"用户登录失败 - IP: {client_ip} 登录参数校验失败：{serializer.errors}")
+            UserLoginLog.objects.create(user=request.user, login_time=timezone.now(), login_ip=get_client_ip(request),
+                                        login_status="失败", login_type="登录失败")
             return common_response(status=status.HTTP_400_BAD_REQUEST, message="用户 登录参数校验失败",
                                    data=serializer.errors)
 
@@ -170,9 +173,15 @@ class UserLoginView(ViewSet):
                     record_login_failure(request, account)
                     fail_count = cache.get(f"fail_account_{account}", 0)
                     logger.warning(f"用户 {account} 在 IP:{client_ip} 尝试登录，密码错误（第 {fail_count} 次）")
+                    UserLoginLog.objects.create(user=user, login_time=timezone.now(), login_ip=get_client_ip(request),
+                                                login_status="失败", login_type="登录失败")
                     return common_response(status=status.HTTP_401_UNAUTHORIZED, message="用户 登录密码错误")
 
                 logger.info(f"用户 IP：{client_ip} 账号：{account} 登录成功，登录时间为：{user.last_login}")
+
+                # 登录日志
+                UserLoginLog.objects.create(user=user,login_time=timezone.now(),login_ip=get_client_ip(request),login_status="成功",login_type="正常登录")
+
                 # 清楚失败的缓存
                 clear_login_success_cache(account)
 
@@ -207,7 +216,7 @@ class UserLoginView(ViewSet):
             logger.warning(f"用户账号 {account} 不存在")
             return common_response(status=status.HTTP_404_NOT_FOUND, message="用户 不存在")
 
-    @api_doc(tags=["用户 用户登出"], request_body=None, response_body=EmptySerializer)
+    @api_doc(tags=["用户 用户登出"], request_body=EmptySerializer, response_body=EmptySerializer)
     @api_post
     def user_login_out(self, request):
         """ 核心就是处理refresh_token"""
@@ -241,15 +250,24 @@ class UserLoginView(ViewSet):
             if remaining_seconds > 0:
                 cache.set(f'blacklist_refresh:{raw_refresh_token}', 1, timeout=remaining_seconds)
                 logger.info(f'用户 IP {client_ip}: 用户登出成功，refresh_token 加入黑名单（剩余 {remaining_seconds}s）')
+
+                # 记录登出日志：
+                UserLoginLog.objects.create(user=request.user,login_time=timezone.now(),login_ip=get_client_ip(request),login_status="成功",login_type="正常登出")
             else:
                 logger.info(f'用户 IP {client_ip}: refresh_token 已过期，无需加入黑名单')
+                UserLoginLog.objects.create(user=request.user, login_time=timezone.now(), login_ip=get_client_ip(request),
+                                            login_status="失败", login_type="登出失败")
             return common_response(status=status.HTTP_200_OK, message="用户 登出成功")
 
         except TokenError as e:
             logger.warning(f'用户 IP {client_ip}: refresh_token 无效或已过期: {str(e)}')
+            UserLoginLog.objects.create(user=request.user, login_time=timezone.now(), login_ip=get_client_ip(request),
+                                        login_status="失败", login_type="登出失败")
             return common_response(status=status.HTTP_401_UNAUTHORIZED, message="用户 登出失败")
         except Exception as e:
             logger.error(f'用户 IP {client_ip}: 登出发生未知错误: {str(e)}', exc_info=True)
+            UserLoginLog.objects.create(user=request.user, login_time=timezone.now(), login_ip=get_client_ip(request),
+                                        login_status="失败", login_type="登出失败")
             return common_response(status=status.HTTP_500_INTERNAL_SERVER_ERROR, message="用户 登出失败")
 
 
@@ -265,9 +283,9 @@ class UserListView(ViewSet):
         query_name = request.data.get("query_name") if "query_name" in request.data else None
         try:
             if query_name:
-                user_list = User.objects.filter(username__icontains=query_name).select_related("organization")
+                user_list = User.objects.filter(username__icontains=query_name).select_related("organization").order_by('-create_time', '-id')
             else:
-                user_list = User.objects.select_related("organization").all()
+                user_list = User.objects.select_related("organization").all().order_by('-create_time', '-id')
 
             paginator = self.pagination_class()
             pagination_data = paginator.paginate_queryset(user_list, request)
