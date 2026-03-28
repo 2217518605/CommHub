@@ -6,18 +6,43 @@ from organization_app.models import Organization
 from .validators import validate_chinese_name, validate_phone, validate_image_format
 
 
+class ContactPersonField(serializers.Field):
+    def to_internal_value(self, data):
+        if isinstance(data, list):
+            cleaned = []
+            for item in data:
+                if not isinstance(item, str):
+                    raise serializers.ValidationError("联系人姓名必须是字符串")
+                validate_chinese_name(item)
+                cleaned.append(item.strip())
+            if len(cleaned) == 0:
+                raise serializers.ValidationError("联系人姓名不能为空")
+            return ",".join(cleaned)
+        if isinstance(data, str):
+            value = data.strip()
+            if not value:
+                raise serializers.ValidationError("联系人姓名不能为空")
+            validate_chinese_name(value)
+            return value
+        raise serializers.ValidationError("联系人姓名格式不正确")
+
+    def to_representation(self, value):
+        if value is None:
+            return []
+        if isinstance(value, list):
+            return value
+        if isinstance(value, str):
+            parts = [item.strip() for item in value.split(",") if item.strip()]
+            return parts
+        return []
+
+
 class OrganizationRequestSerializer(serializers.ModelSerializer):
     """ 组织机构创建入参序列化器 """
 
     org_name = serializers.CharField(label="社区组织名称", help_text="社区组织名称", required=True,
                                      error_messages={'blank': '社区组织名称不能为空'})
-    contact_person = serializers.ListField(
-        child=serializers.CharField(
-            max_length=20,
-            validators=[validate_chinese_name]
-        ),
-        required=True, allow_empty=True, min_length=1,
-        help_text='联系人姓名列表，例如：["张三"] 或 ["张三", "李四"]')
+    contact_person = ContactPersonField(required=True, help_text='联系人姓名列表，例如：["张三"] 或 ["张三", "李四"]')
     contact_phone = serializers.CharField(label="组织联系电话", help_text="组织联系电话", required=True,
                                           validators=[validate_phone])
     contact_email = serializers.EmailField(label="社区联系邮箱", help_text="社区联系邮箱", required=False)
@@ -40,7 +65,7 @@ class OrganizationResponseSerializer(serializers.ModelSerializer):
 
     id = serializers.IntegerField(label="社区组织ID", help_text="社区组织ID")
     org_name = serializers.CharField(label="社区组织名称", help_text="社区组织名称")
-    contact_person = serializers.CharField(label="组织联系人", help_text="组织联系人")
+    contact_person = ContactPersonField()
     contact_phone = serializers.CharField(label="组织联系电话", help_text="组织联系电话")
     contact_email = serializers.EmailField(label="社区联系邮箱", help_text="社区联系邮箱")
     address = serializers.CharField(label="地址", help_text="地址")
@@ -57,13 +82,7 @@ class OrganizationUpdateSerializer(serializers.ModelSerializer):
 
     org_name = serializers.CharField(label="社区组织名称", help_text="社区组织名称", required=False,
                                      error_messages={'blank': '社区组织名称不能为空'})
-    contact_person = serializers.ListField(
-        child=serializers.CharField(
-            max_length=20,
-            validators=[validate_chinese_name]
-        ),
-        required=False, allow_empty=True, min_length=1,
-        help_text='联系人姓名列表，例如：["张三"] 或 ["张三", "李四"]')
+    contact_person = ContactPersonField(required=False, help_text='联系人姓名列表，例如：["张三"] 或 ["张三", "李四"]')
     contact_phone = serializers.CharField(label="组织联系电话", help_text="组织联系电话", required=False,
                                           validators=[validate_phone])
     contact_email = serializers.EmailField(label="社区联系邮箱", help_text="社区联系邮箱", required=False)

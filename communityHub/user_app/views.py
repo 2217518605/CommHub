@@ -5,7 +5,7 @@ import datetime
 from django.core.cache import cache
 from django.utils import timezone
 from django.db import transaction
-from django.shortcuts import get_object_or_404
+# from django.shortcuts import get_object_or_404
 from rest_framework import status
 from rest_framework.viewsets import ViewSet
 from rest_framework_simplejwt.tokens import RefreshToken, AccessToken
@@ -13,7 +13,7 @@ from rest_framework_simplejwt.exceptions import TokenError, InvalidToken
 from rest_framework_simplejwt.settings import api_settings
 from rest_framework.permissions import IsAuthenticated, AllowAny
 
-from user_app.models import User,UserLoginLog
+from user_app.models import User, UserLoginLog
 from config.decorators.common import api_doc, api_get, api_post, api_put, api_delete, require_login
 from config.help_tools import CommonPageNumberPagination
 from user_app.serializers import UserRegisterSerializer, UserResponseSerializer, UserLoginSerializer, \
@@ -24,6 +24,7 @@ from config.help_tools import get_client_ip, common_response
 from user_app.validators import check_ip_lock, check_account_lock, record_login_failure, clear_login_success_cache, \
     record_ip_register
 from config.authentication import IsAdmin, IsSuperAdmin, IsPublic, IsCommonUser
+from config.help_tools import get_object_or_404
 
 logger = logging.getLogger(__name__)
 
@@ -70,7 +71,7 @@ class UserRetrieveView(ViewSet):
             logger.warning(f"用户 发生越权查询，用户查询失败:用户 ID ：{pk} 的用户非法")
             return common_response(status=status.HTTP_403_FORBIDDEN, message="用户 非法查询")
 
-        user = get_object_or_404(User, pk=pk)
+        user = get_object_or_404(User, msg="用户不存在", pk=pk)
         return common_response(status=status.HTTP_200_OK, message="用户 查询成功",
                                data=UserResponseSerializer(user).data)
 
@@ -180,7 +181,8 @@ class UserLoginView(ViewSet):
                 logger.info(f"用户 IP：{client_ip} 账号：{account} 登录成功，登录时间为：{user.last_login}")
 
                 # 登录日志
-                UserLoginLog.objects.create(user=user,login_time=timezone.now(),login_ip=get_client_ip(request),login_status="成功",login_type="正常登录")
+                UserLoginLog.objects.create(user=user, login_time=timezone.now(), login_ip=get_client_ip(request),
+                                            login_status="成功", login_type="正常登录")
 
                 # 清楚失败的缓存
                 clear_login_success_cache(account)
@@ -252,10 +254,12 @@ class UserLoginView(ViewSet):
                 logger.info(f'用户 IP {client_ip}: 用户登出成功，refresh_token 加入黑名单（剩余 {remaining_seconds}s）')
 
                 # 记录登出日志：
-                UserLoginLog.objects.create(user=request.user,login_time=timezone.now(),login_ip=get_client_ip(request),login_status="成功",login_type="正常登出")
+                UserLoginLog.objects.create(user=request.user, login_time=timezone.now(),
+                                            login_ip=get_client_ip(request), login_status="成功", login_type="正常登出")
             else:
                 logger.info(f'用户 IP {client_ip}: refresh_token 已过期，无需加入黑名单')
-                UserLoginLog.objects.create(user=request.user, login_time=timezone.now(), login_ip=get_client_ip(request),
+                UserLoginLog.objects.create(user=request.user, login_time=timezone.now(),
+                                            login_ip=get_client_ip(request),
                                             login_status="失败", login_type="登出失败")
             return common_response(status=status.HTTP_200_OK, message="用户 登出成功")
 
@@ -283,7 +287,8 @@ class UserListView(ViewSet):
         query_name = request.data.get("query_name") if "query_name" in request.data else None
         try:
             if query_name:
-                user_list = User.objects.filter(username__icontains=query_name).select_related("organization").order_by('-create_time', '-id')
+                user_list = User.objects.filter(username__icontains=query_name).select_related("organization").order_by(
+                    '-create_time', '-id')
             else:
                 user_list = User.objects.select_related("organization").all().order_by('-create_time', '-id')
 

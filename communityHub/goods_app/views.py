@@ -1,6 +1,6 @@
 import logging
 
-from django.shortcuts import get_object_or_404
+# from django.shortcuts import get_object_or_404
 from django.db import transaction
 from django.conf import settings
 from rest_framework.viewsets import ViewSet
@@ -14,12 +14,12 @@ from user_app.models import User
 from organization_app.models import Organization
 from goods_app.models import Goods, GoodsComments, GoodsLog, GoodsCommentsLog
 from goods_app.serializers import GoodsCommentsRetrieveSerializer, GoodsCommentsResponseSerializer, \
-    GoodsCommonSerializer, GoodsResponseSerializer, GoodsQueryByNameSerializer, GoodsCommentsSerializer
+    GoodsCommonSerializer, GoodsResponseSerializer, GoodsQueryByNameSerializer, GoodsCommentsSerializer,GoodsCommentsIncreaseLikeNumSerializer
 from config.help_tools import common_response
 from config.authentication import IsAdmin, IsSuperAdmin, IsPublic, IsCommonUser
 from config.help_tools import CommonPageNumberPagination
 from config.serializers.base import EmptySerializer
-from config.help_tools import get_client_ip
+from config.help_tools import get_client_ip, get_object_or_404
 
 logger = logging.getLogger(__name__)
 
@@ -40,7 +40,7 @@ class GoodsRetrieveViewSet(ViewSet):
     @api_get
     def retrieve(self, request, pk):
 
-        goods = get_object_or_404(Goods.objects.select_related('user', 'organization'), pk=pk)
+        goods = get_object_or_404(Goods.objects.select_related('user', 'organization'), msg="要获取的商品不存在", pk=pk)
         serializer = GoodsResponseSerializer(goods)
         logger.info(f'商品 获取成功：商品信息：{serializer.data}')
         return common_response(status=status.HTTP_200_OK, message="商品详情获取成功", data=serializer.data)
@@ -75,7 +75,7 @@ class GoodsRetrieveViewSet(ViewSet):
     @api_put
     def update(self, request, pk):
 
-        goods = get_object_or_404(Goods.objects.select_related('user', 'organization'), pk=pk)
+        goods = get_object_or_404(Goods.objects.select_related('user', 'organization'), msg="要更新的商品不存在",pk=pk)
 
         if goods.user != request.user:
             logger.warning(f'用户 {request.user.username} 没有权限修改商品 {goods.name}')
@@ -102,7 +102,7 @@ class GoodsRetrieveViewSet(ViewSet):
     @transaction.atomic
     def destroy(self, request, pk):
 
-        goods = get_object_or_404(Goods.objects.select_related('user', 'organization'), pk=pk)
+        goods = get_object_or_404(Goods.objects.select_related('user', 'organization'), msg="要删除的商品不存在", pk=pk)
 
         if goods.user != request.user:
             logger.warning(f'用户 {request.user.username} 没有权限删除商品 {goods.name}')
@@ -163,18 +163,18 @@ class GoodsCommentsRetrieveViewSet(ViewSet):
             logger.warning(f'商品评论 创建商品评论失败：参数校验失败：{serializer.errors}')
             return common_response(status=status.HTTP_400_BAD_REQUEST, message="商品评论创建失败,参数校验失败",
                                    data=serializer.errors)
+        elif serializer.is_valid():
+            goods = serializer.validated_data.get("goods")
+            parent = serializer.validated_data.get("parent")
+            if parent and parent.goods_id != goods.id:
+                logger.warning(f'商品评论 创建商品评论失败：回复的评论不属于该商品')
+                return common_response(status=status.HTTP_400_BAD_REQUEST,
+                                       message="商品评论创建失败,回复的评论不属于该商品", data=serializer.errors)
 
-        goods = serializer.validated_data.get("goods")
-        parent = serializer.validated_data.get("parent")
-        if parent and parent.goods_id != goods.id:
-            logger.warning(f'商品评论 创建商品评论失败：回复的评论不属于该商品')
-            return common_response(status=status.HTTP_400_BAD_REQUEST,
-                                   message="商品评论创建失败,回复的评论不属于该商品", data=serializer.errors)
-
-        comment = serializer.save(user=user, organization=org)
-        logger.info(f'商品评论 创建成功：商品评论信息：{serializer.data}')
-        return common_response(status=status.HTTP_201_CREATED, message="商品评论创建成功",
-                               data=GoodsCommentsResponseSerializer(comment).data)
+            comment = serializer.save(user=user)
+            logger.info(f'商品评论 创建成功：商品评论信息：{serializer.data}')
+            return common_response(status=status.HTTP_201_CREATED, message="商品评论创建成功",
+                                   data=GoodsCommentsResponseSerializer(comment).data)
 
     @api_doc(tags=["商品评论 删除商品评论"], request_body=GoodsCommentsRetrieveSerializer,
              response_body=EmptySerializer)
@@ -184,7 +184,7 @@ class GoodsCommentsRetrieveViewSet(ViewSet):
 
         current_user = request.user
 
-        comment = get_object_or_404(GoodsComments.objects.select_related('user', 'goods',"user__organization"), pk=pk)
+        comment = get_object_or_404(GoodsComments.objects.select_related('user', 'goods', "user__organization"), pk=pk)
 
         is_admin = current_user.user_type in ["admin", "super_admin"]
         is_owner = (comment.user == current_user)
@@ -193,11 +193,17 @@ class GoodsCommentsRetrieveViewSet(ViewSet):
             logger.warning(f'用户 {current_user.username} 没有权限删除商品评论 {comment.id}')
             return common_response(status=status.HTTP_403_FORBIDDEN, message="用户没有权限删除商品评论")
 
-        if is_admin and not is_owner:
+        if is_admin and is_owner:
+            op_type = "admin_delete"
+            reason = "管理员本人删除自己的评论"
+            logger.warning(
+                f"管理员：{current_user.username} 删除了自己的：{comment.user.username} 的评论，评论的ID ：{comment.id}")
+        elif is_admin and not is_owner:
             op_type = "admin_delete"
             reason = "管理员强制执行删除"
             logger.warning(
-                f"管理员：{current_user.username} 删除了用户：{comment.user.username} 的评论，评论的ID ：{comment.id}")
+                f"管理员：{current_user.username} 强行删除了用户：{comment.user.username} 的评论，评论的ID ：{comment.id}"
+            )
         else:
             op_type = "delete"
             reason = "用户自己删除"
@@ -207,7 +213,7 @@ class GoodsCommentsRetrieveViewSet(ViewSet):
 
         # 记录管理员删除的日志
         GoodsCommentsLog.objects.create(comment=comment, operator=current_user, organization=org,
-                                        comment_id_snapshot=comment.id, content_snapshot=comment.content[:500],
+                                        comment_id_snapshot=comment.id, content_snapshot=comment.comment[:500],
                                         operation_type=op_type, ip_address=get_client_ip(request), reason=reason)
 
         comment.delete()
@@ -232,7 +238,7 @@ class GoodsCommentsListViewSet(ViewSet):
 
         # 查询当前商品下面的评论的子级评论
         if show_reply_comments and parent_id:
-            parent_comment = get_object_or_404(GoodsComments.objects.select_related('user', 'goods', "organization"),
+            parent_comment = get_object_or_404(GoodsComments.objects.select_related('user', 'goods'),
                                                pk=parent_id)
 
             try:
@@ -245,13 +251,13 @@ class GoodsCommentsListViewSet(ViewSet):
                 return common_response(status=status.HTTP_400_BAD_REQUEST,
                                        message="商品评论获取失败,父级商品评论不属于该商品")
 
-            comments_replies_list = parent_comment.replies.select_related('user', 'goods', "organization").order_by(
+            comments_replies_list = parent_comment.replies.select_related('user', 'goods').order_by(
                 '-create_time', '-id')[:settings.MAX_REPLY_DISPLAY_COUNT]
             return common_response(status=status.HTTP_200_OK, message="获取商品子级评论成功",
                                    data=GoodsCommentsResponseSerializer(comments_replies_list, many=True).data)
 
         # 获取商品评论（一次50条，获取更多就刷新一次接口）
-        comments_list = GoodsComments.objects.select_related('user', 'goods', "organization").filter(goods_id=goods_id,
+        comments_list = GoodsComments.objects.select_related('user', 'goods').filter(goods_id=goods_id,
                                                                                                      parent=None).order_by(
             '-create_time', '-id')[:settings.MAX_COMMENT_COUNT]
 
@@ -264,3 +270,32 @@ class GoodsCommentsListViewSet(ViewSet):
             "message": "获取商品评论成功",
             "data": serializer.data
         })
+
+class GoodsCommentsLikeNumViewSet(ViewSet):
+
+    perimissions = [IsCommonUser]
+
+    @api_doc(tags=["商品评论 点赞数增加"],request_body=GoodsCommentsIncreaseLikeNumSerializer,response_body=EmptySerializer)
+    @api_post
+    def increase_like_num(self, request):
+
+        is_increase_like_num = request.data.get("is_increase_like_num")
+        is_decrease_like_num = request.data.get("is_decrease_like_num")
+        good_comment_id = request.data.get("comment_id")
+
+        # 不能同时增加和减少
+        if is_increase_like_num and is_decrease_like_num:
+            return common_response(status=status.HTTP_400_BAD_REQUEST, message="不能同时增加和减少")
+
+        if is_increase_like_num:
+            comment = get_object_or_404(GoodsComments.objects.select_related('user', 'goods'),msg="商品评论不存在",pk=good_comment_id)
+            comment.like_num += 1
+            comment.save()
+            logger.info(f'商品评论 点赞数增加成功：商品评论ID：{good_comment_id}')
+            return common_response(status=status.HTTP_200_OK, message="商品评论点赞数增加成功")
+        if is_decrease_like_num:
+            comment = get_object_or_404(GoodsComments.objects.select_related('user', 'goods'),msg="商品评论不存在",pk=good_comment_id)
+            comment.like_num -= 1
+            comment.save()
+            logger.info(f'商品评论 点赞数减少成功：商品评论ID：{good_comment_id}')
+            return common_response(status=status.HTTP_200_OK, message="商品评论点赞数减少成功")

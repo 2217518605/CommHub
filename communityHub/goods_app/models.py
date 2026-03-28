@@ -77,9 +77,9 @@ class GoodsComments(BaseModel):
     goods = models.ForeignKey(Goods, verbose_name="商品", help_text="商品", blank=False, null=False,
                               on_delete=models.CASCADE,
                               related_name='goods_comments')
-    user = models.ForeignKey(User, verbose_name="用户", help_text="用户", blank=False, null=False,
+    user = models.ForeignKey(User, verbose_name="用户", help_text="用户", blank=True, null=True,
                              on_delete=models.CASCADE,
-                             related_name='user_comments')
+                             related_name='user_comments')   # 在请求的时候会传递了
     parent = models.ForeignKey('self', verbose_name="商品的父评论", help_text="商品的父评论", blank=True, null=True,
                                on_delete=models.CASCADE, related_name='replies')
     comment = models.TextField(verbose_name="评论", help_text="评论", blank=False, null=False)

@@ -25,3 +25,21 @@ class IsSuperAdmin(BasePermission):
 
     def has_permission(self, request, view):
         return request.user.is_authenticated and request.user.is_staff == True
+
+
+class IsAdminOrSuper(BasePermission):
+    """ 管理员或超级管理员权限 """
+
+    def has_permission(self, request, view):
+        return IsAdmin().has_permission(request, view) or IsSuperAdmin().has_permission(request, view)
+
+
+class IsAdminOrSuperOrCommon(BasePermission):
+    """ 管理员、超级管理员或普通用户权限 """
+
+    def has_permission(self, request, view):
+        return (
+            IsAdmin().has_permission(request, view)
+            or IsSuperAdmin().has_permission(request, view)
+            or IsCommonUser().has_permission(request, view)
+        )

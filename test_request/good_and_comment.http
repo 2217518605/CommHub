@@ -1,7 +1,7 @@
-@access_token = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoiYWNjZXNzIiwiZXhwIjoxNzc0MTkxMjkyLCJpYXQiOjE3NzQxMDQ4OTIsImp0aSI6ImRjMThhODE5ZjEzZDQwMTBhZTY0Nzk0ODcyNzBkZDk3IiwidXNlcl9pZCI6IjUifQ.BJqyul2kQHnAJvUoVPZ_UO4SPR1kQKaaqH0F0Twt1Cc
+@access_token = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoiYWNjZXNzIiwiZXhwIjoxNzc0NzEwNDY3LCJpYXQiOjE3NzQ2MjQwNjcsImp0aSI6ImJkNTMwNmM4YzhlOTRjYzI4YzhhZGM3YzhjMmFkMmJlIiwidXNlcl9pZCI6IjUifQ.7GEvRLUxCTHVojeb-UEIRmZyNeztFpTGjqXiNpjlyPU
 
 ### 获取商品信息
-GET http://localhost:8000/goods/goods_retrieve/3/
+GET http://localhost:8000/goods/goods_retrieve/4/
 
 
 ### 创建商品
@@ -19,7 +19,7 @@ Content-Type: application/json
 }
 
 ### 修改商品
-PUT http://localhost:8000/goods/goods_retrieve/2/
+PUT http://localhost:8000/goods/goods_retrieve/4/
 Authorization: Bearer {{access_token}}
 Content-Type: application/json
 
@@ -33,5 +33,43 @@ Content-Type: application/json
 }
 
 ### 删除商品
-DELETE http://localhost:8000/goods/goods_retrieve/3/
+DELETE http://localhost:8000/goods/goods_retrieve/4/
 Authorization: Bearer {{access_token}}
+
+
+
+### 创建商品评论
+POST http://localhost:8000/goods/goods_comments_create/
+Authorization: Bearer {{access_token}}
+Content-Type: application/json
+
+{
+  "goods": 1,
+  "comment": "测试的评论",
+  "like_num": 998
+}
+
+### 获取商品评论( 子级评论 )：
+POST http://localhost:8000/goods/goods_comments_list/
+Content-Type: application/json
+
+{
+  "goods_id": 1,
+  "id": 1,
+  "show_reply_comments": true
+}
+
+
+### 删除商品评论
+DELETE http://localhost:8000/goods/goods_comments_retrieve/5/
+Authorization: Bearer {{access_token}}
+
+### 增加点赞数
+POST http://localhost:8000/goods/goods_comment_increase_like_num/
+Authorization: Bearer {{access_token}}
+Content-Type: application/json
+
+{
+  "comment_id": 7,
+  "is_decrease_like_num":  true
+}

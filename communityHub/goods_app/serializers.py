@@ -117,7 +117,19 @@ class GoodsCommentsRetrieveSerializer(serializers.ModelSerializer):
 
     show_reply_comments = serializers.BooleanField(help_text="是否显示回复的评论", default=False)
     goods_id = serializers.IntegerField(help_text="商品ID", write_only=True, required=True)
+    id = serializers.IntegerField(help_text="父级评论ID", write_only=True, required=False)
 
     class Meta:
         model = GoodsComments
         fields = ["id", "show_reply_comments", "goods_id"]
+
+class GoodsCommentsIncreaseLikeNumSerializer(serializers.ModelSerializer):
+    """ 评论点赞 """
+
+    comment_id = serializers.IntegerField(help_text="评论ID", write_only=True, required=True)
+    is_increase_like_num = serializers.BooleanField(help_text="是否点赞", default=True)
+    is_decrease_like_num = serializers.BooleanField(help_text="是否取消点赞", default=False)
+
+    class Meta:
+        model = GoodsComments
+        fields = ["id", "is_increase_like_num"]

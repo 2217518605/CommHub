@@ -1,5 +1,8 @@
+@access_token = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoiYWNjZXNzIiwiZXhwIjoxNzc0NzEwNDY3LCJpYXQiOjE3NzQ2MjQwNjcsImp0aSI6ImJkNTMwNmM4YzhlOTRjYzI4YzhhZGM3YzhjMmFkMmJlIiwidXNlcl9pZCI6IjUifQ.7GEvRLUxCTHVojeb-UEIRmZyNeztFpTGjqXiNpjlyPU
+
 ### 创建组织
 POST http://localhost:8000/organization/organization_create/
+Authorization: Bearer {{access_token}}
 Content-type: application/json
 
 {
@@ -11,11 +14,18 @@ Content-type: application/json
   "description": "这是创建的第一个组织"
 }
 
-### 获取组织列表
+
+### 获取组织列表（导出列表）
 GET http://localhost:8000/organization/organization_list/
+Authorization: Bearer {{access_token}}
+
+### 获取组织详情
+GET http://localhost:8000/organization/organization_retrieve/1/
+Authorization: Bearer {{access_token}}
 
 ### 修改组织信息
 PUT http://localhost:8000/organization/organization_retrieve/1/
+Authorization: Bearer {{access_token}}
 Content-type: application/json
 
 {
@@ -30,3 +40,4 @@ Content-type: application/json
 
 ### 删除组织
 DELETE http://localhost:8000/organization/organization_retrieve/5/
+Authorization: Bearer {{access_token}}

@@ -4,6 +4,8 @@ from rest_framework.pagination import PageNumberPagination
 from rest_framework.response import Response
 from rest_framework.views import exception_handler
 from rest_framework import status
+from rest_framework.exceptions import NotFound
+from django.shortcuts import _get_queryset
 
 logger = logging.getLogger(__name__)
 
@@ -101,3 +103,27 @@ def common_response(status: int = status.HTTP_200_OK, message: str = "操作成�
         "message": message,
         "data": data
     })
+
+
+def get_object_or_404(klass, *args, msg=None, **kwargs):
+    """ 改写Django原生的报错机制，更加人类化 """
+
+    queryset = _get_queryset(klass)
+
+    if not hasattr(queryset, "get"):
+        klass__name = klass.__name__ if isinstance(klass, type) else klass.__class__.__name__
+        raise ValueError(f"First argument must be a Model, Manager, or QuerySet, not '{klass__name}'.")
+
+    try:
+        return queryset.get(*args, **kwargs)
+    except queryset.model.DoesNotExist:
+        if msg:
+            error_message = msg
+        else:
+            model_name = queryset.model._meta.verbose_name
+            lookup = ", ".join(f"{k}={v}" for k, v in kwargs.items())
+            error_message = f"无法找到 {model_name} (条件: {lookup})"
+
+        logger.warning(f"Data not found: {error_message}")
+
+        raise NotFound(error_message)
