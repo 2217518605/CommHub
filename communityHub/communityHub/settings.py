@@ -49,6 +49,7 @@ INSTALLED_APPS = [
     'models',  # 基础模型
     'organization_app',  # 组织机构应用
     'user_app',  # 用户应用
+    'goods_app',  # 商品应用
 ]
 
 MIDDLEWARE = [
@@ -279,9 +280,12 @@ REST_FRAMEWORK = {
 }
 
 CACHE_KEY_IP_FAIL = "login_fail_ip_{}"  # 缓存登录失败的 Ip 次数
-CACHE_KEY_REGISTER = "register_ip_{}" # 缓存注册的 Ip
+CACHE_KEY_REGISTER = "register_ip_{}"  # 缓存注册的 Ip
 CACHE_KEY_ACCOUNT_FAIL = "fail_account_{}"  # 缓存同一账号次数
 
 ACCOUNT_MAX_FAILS = 10  # 登录时候账号校验最大次数
 IP_MAX_FAILS = 10  # 登录时候和注册账号 Ip 最大限制次数
 LOCK_TIME = 60 * 30  # ip 锁定时间(30分钟)
+
+MAX_REPLY_DISPLAY_COUNT = 5  # 商品评论回复显示最大数量（一次）
+MAX_COMMENT_COUNT = 50  # 商品评论显示最大数量（一次）,再获取就刷新一次接口

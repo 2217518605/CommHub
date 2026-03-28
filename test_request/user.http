@@ -1,4 +1,4 @@
-@access_token = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoiYWNjZXNzIiwiZXhwIjoxNzczNDExNjI2LCJpYXQiOjE3NzMzMjUyMjYsImp0aSI6IjIxZmFmODNmODAxNDQ0OTQ4NmYxMjg0OTE2ODNjMTM0IiwidXNlcl9pZCI6IjUifQ.BWfqMRprNtxzqH15BW7hPFcl079G_458H-hZf5Ic7Pk
+@access_token = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoiYWNjZXNzIiwiZXhwIjoxNzc0NzEwNDY3LCJpYXQiOjE3NzQ2MjQwNjcsImp0aSI6ImJkNTMwNmM4YzhlOTRjYzI4YzhhZGM3YzhjMmFkMmJlIiwidXNlcl9pZCI6IjUifQ.7GEvRLUxCTHVojeb-UEIRmZyNeztFpTGjqXiNpjlyPU
 
 ### 用户登录
 POST http://localhost:8000/user/user_login/
@@ -17,14 +17,14 @@ POST http://localhost:8000/user/user_create/
 Content-Type: application/json
 
 {
-  "username": "久孤",
-  "account": "2217518715",
+  "username": "久小孤",
+  "account": "2217519715",
   "password": "123456",
   "password_confirm": "123456",
-  "mobile": "13438871643",
-  "email":"2217518715@qq.com",
+  "mobile": "13438881643",
+  "email":"2217818715@qq.com",
   "birth_date": "2026-03-01",
-  "id_card": "440982212712175893",
+  "id_card": "440982212712175993",
   "balance": 1000000.00,
   "is_active": true,
   "is_staff": true,
@@ -57,3 +57,12 @@ Content-Type: application/json
 ### 删除用户
 DELETE http://localhost:8000/user/user_retrieve/4/
 Authorization: Bearer {{access_token}}
+
+### 通过关键词查询用户
+POST http://localhost:8000/user/user_list/
+Authorization: Bearer {{access_token}}
+Content-Type: application/json
+
+{
+   "query_name":"久"
+}

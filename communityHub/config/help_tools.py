@@ -4,6 +4,8 @@ from rest_framework.pagination import PageNumberPagination
 from rest_framework.response import Response
 from rest_framework.views import exception_handler
 from rest_framework import status
+from rest_framework.exceptions import NotFound
+from django.shortcuts import _get_queryset
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +38,8 @@ def get_client_ip(request):
     """
     获取客户端真实 IP
     """
-    x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
+    x_forwarded_for = request.META.get(
+        'HTTP_X_FORWARDED_FOR')  # X-Forwarded-For: <client>, <proxy1>, <proxy2>, <proxy3>
     if x_forwarded_for:
         ip = x_forwarded_for.split(',')[0].strip()
     else:
@@ -76,19 +79,51 @@ def common_exception_handler(exc, context):
             {"detail": "服务器内部错误，请稍后再试"},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
-        
+
     if response.status_code >= 400:
         if response.status_code == 400:
-            logger.warning(f"【{response.status_code} 客户端参数格式错误】{response.data}",extra=log_extra)
+            logger.warning(f"【{response.status_code} 客户端参数格式错误】{response.data}", extra=log_extra)
         elif response.status_code == 401:
-            logger.warning(f"【{response.status_code} 客户端未授权】{response.data}",extra=log_extra)
+            logger.warning(f"【{response.status_code} 客户端未授权】{response.data}", extra=log_extra)
         elif response.status_code == 403:
-            logger.warning(f"【{response.status_code} 客户端无权限】{response.data}",extra=log_extra)
+            logger.warning(f"【{response.status_code} 客户端无权限】{response.data}", extra=log_extra)
         elif response.status_code == 404:
-            logger.warning(f"【{response.status_code} 客户端资源不存在】{response.data}",extra=log_extra)
+            logger.warning(f"【{response.status_code} 客户端资源不存在】{response.data}", extra=log_extra)
         elif response.status_code == 405:
-            logger.warning(f"【{response.status_code} 客户端请求方法不支持】{response.data}",extra=log_extra)
+            logger.warning(f"【{response.status_code} 客户端请求方法不支持】{response.data}", extra=log_extra)
         elif response.status_code == 406:
-            logger.warning(f"【{response.status_code} 客户端请求格式不支持】{response.data}",extra=log_extra)
-            
+            logger.warning(f"【{response.status_code} 客户端请求格式不支持】{response.data}", extra=log_extra)
+
     return response
+
+
+def common_response(status: int = status.HTTP_200_OK, message: str = "操作成功", data: dict = None):
+    return Response({
+        "status": status,
+        "message": message,
+        "data": data
+    })
+
+
+def get_object_or_404(klass, *args, msg=None, **kwargs):
+    """ 改写Django原生的报错机制，更加人类化 """
+
+    queryset = _get_queryset(klass)
+
+    if not hasattr(queryset, "get"):
+        klass__name = klass.__name__ if isinstance(klass, type) else klass.__class__.__name__
+        raise ValueError(f"First argument must be a Model, Manager, or QuerySet, not '{klass__name}'.")
+
+    try:
+        return queryset.get(*args, **kwargs)
+    except queryset.model.DoesNotExist:
+        if msg:
+            error_message = msg
+        else:
+            model_name = queryset.model._meta.verbose_name
+            lookup = ", ".join(f"{k}={v}" for k, v in kwargs.items())
+            error_message = f"无法找到 {model_name} (条件: {lookup})"
+
+        logger.warning(f"Data not found: {error_message}")
+
+        raise NotFound(error_message)

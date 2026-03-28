@@ -1,0 +1,75 @@
+@access_token = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoiYWNjZXNzIiwiZXhwIjoxNzc0NzEwNDY3LCJpYXQiOjE3NzQ2MjQwNjcsImp0aSI6ImJkNTMwNmM4YzhlOTRjYzI4YzhhZGM3YzhjMmFkMmJlIiwidXNlcl9pZCI6IjUifQ.7GEvRLUxCTHVojeb-UEIRmZyNeztFpTGjqXiNpjlyPU
+
+### 获取商品信息
+GET http://localhost:8000/goods/goods_retrieve/4/
+
+
+### 创建商品
+POST http://localhost:8000/goods/goods_create/
+Authorization: Bearer {{access_token}}
+Content-Type: application/json
+
+{
+  "name": "test",
+  "price": 9999.00,
+  "number": 100,
+  "desc": "这是最新出的iphone 17 pro max",
+  "status": "pending",
+  "sold_count": 12
+}
+
+### 修改商品
+PUT http://localhost:8000/goods/goods_retrieve/4/
+Authorization: Bearer {{access_token}}
+Content-Type: application/json
+
+{
+  "name": "iqoo 15",
+  "price": 4499.00,
+  "number": 2001,
+  "desc": "这是最新出的iqoo 15",
+  "status": "normal",
+  "sold_count": 1200
+}
+
+### 删除商品
+DELETE http://localhost:8000/goods/goods_retrieve/4/
+Authorization: Bearer {{access_token}}
+
+
+
+### 创建商品评论
+POST http://localhost:8000/goods/goods_comments_create/
+Authorization: Bearer {{access_token}}
+Content-Type: application/json
+
+{
+  "goods": 1,
+  "comment": "测试的评论",
+  "like_num": 998
+}
+
+### 获取商品评论( 子级评论 )：
+POST http://localhost:8000/goods/goods_comments_list/
+Content-Type: application/json
+
+{
+  "goods_id": 1,
+  "id": 1,
+  "show_reply_comments": true
+}
+
+
+### 删除商品评论
+DELETE http://localhost:8000/goods/goods_comments_retrieve/5/
+Authorization: Bearer {{access_token}}
+
+### 增加点赞数
+POST http://localhost:8000/goods/goods_comment_increase_like_num/
+Authorization: Bearer {{access_token}}
+Content-Type: application/json
+
+{
+  "comment_id": 7,
+  "is_decrease_like_num":  true
+}

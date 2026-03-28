@@ -1,6 +1,6 @@
 from django.urls import path
 
-from .views import UserRetrieveView, UserLoginView
+from .views import UserRetrieveView, UserLoginView, UserListView
 
 urlpatterns = [
     path("user_create/", UserRetrieveView.as_view({'post': 'create'}), name="user_create"),
@@ -8,4 +8,5 @@ urlpatterns = [
          name="user_retrieve"),
     path("user_login/", UserLoginView.as_view({'post': 'user_login'}), name="user_login"),
     path("user_logout/", UserLoginView.as_view({'post': 'user_login_out'}), name="user_logout"),
+    path("user_list/", UserListView.as_view({"post": "user_query_by_name"}), name="user_list"),
 ]

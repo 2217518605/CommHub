@@ -101,3 +101,13 @@ class UserResponseSerializer(serializers.ModelSerializer):
             "organization_id",
             "is_active", "is_staff", "user_type", "last_login"
         ]
+
+
+class UserQueryByNameSerializer(serializers.Serializer):
+    """ 通过关键词查找用户 """
+
+    query_name = serializers.CharField(help_text="用户名关键字", allow_blank=True, allow_null=True)
+
+    class Meta:
+        model = User
+        fields = "__all__"

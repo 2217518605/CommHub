@@ -40,5 +40,6 @@ urlpatterns = [
                   path("swagger/",schema_view.with_ui('swagger', cache_timeout=0), name='schema-swagger-ui'), # Swagger 文档
                   path("organization/",include("organization_app.urls")),
                   path("user/",include("user_app.urls")),
+                  path("goods/",include("goods_app.urls")),
 
               ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
