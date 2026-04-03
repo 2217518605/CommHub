@@ -57,7 +57,7 @@ class UserRetrieveView(ViewSet):
             return common_response(status=status.HTTP_200_OK, message="用户 创建用户成功",
                                    data=UserResponseSerializer(register_data).data)
         else:
-            logger.error(f'用户 创建用户错误：{serializer.errors}')
+            logger.error(f'用户 创建用户错误：{serializer.errors}', exc_info=True)
             record_ip_register(request)  # 记录 IP 注册次数
             return common_response(status=status.HTTP_400_BAD_REQUEST, message="用户 创建用户失败",
                                    data=serializer.errors)
@@ -97,7 +97,7 @@ class UserRetrieveView(ViewSet):
                 return common_response(status=status.HTTP_200_OK, message=f"用户 {update_data.account} 更新成功",
                                        data=UserResponseSerializer(update_data).data)
             else:
-                logger.error(f'用户 用户更新错误：{serializer.errors}')
+                logger.error(f'用户 用户更新错误：{serializer.errors}', exc_info=True)
                 return common_response(status=status.HTTP_400_BAD_REQUEST, message="用户 更新失败",
                                        data=serializer.errors)
 
@@ -303,5 +303,5 @@ class UserListView(ViewSet):
                 "data": serializer.data
             })
         except Exception as e:
-            logger.error("用户列表查询失败！")
+            logger.error("用户列表查询失败！", exc_info=True)
             return common_response(status=status.HTTP_400_BAD_REQUEST, message="用户列表查询失败")

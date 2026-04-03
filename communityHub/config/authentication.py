@@ -7,11 +7,13 @@ class IsPublic(BasePermission):
     def has_permission(self, request, view):
         return True
 
+
 class IsCommonUser(BasePermission):
     """ 普通用户权限(登录的都可以) """
 
     def has_permission(self, request, view):
         return request.user.is_authenticated
+
 
 class IsAdmin(BasePermission):
     """ 管理员权限 """
@@ -39,7 +41,7 @@ class IsAdminOrSuperOrCommon(BasePermission):
 
     def has_permission(self, request, view):
         return (
-            IsAdmin().has_permission(request, view)
-            or IsSuperAdmin().has_permission(request, view)
-            or IsCommonUser().has_permission(request, view)
+                IsAdmin().has_permission(request, view)
+                or IsSuperAdmin().has_permission(request, view)
+                or IsCommonUser().has_permission(request, view)
         )

@@ -8,6 +8,13 @@ from organization_app.models import Organization
 class Goods(BaseModel):
     """ 商品模型 """
 
+    STATUS_CHOICES = (
+        ("pending", "待审核"),
+        ("normal", "已上架"),
+        ("offshelf", "已下架"),
+        ("soldout", "已售完"),
+    )
+
     organization = models.ForeignKey(Organization, on_delete=models.CASCADE, verbose_name="所属组织",
                                      help_text="所属组织", blank=False, null=False, related_name="org_goods")
     user = models.ForeignKey(User, on_delete=models.CASCADE, verbose_name="发布者", related_name="user_goods")
@@ -21,8 +28,7 @@ class Goods(BaseModel):
     small_img = models.ImageField(verbose_name="商品缩略图", help_text="商品缩略图", blank=True, null=True,
                                   upload_to='goods_photos/', default='goods_photos/default_goods_photos.png')
     status = models.CharField(verbose_name="商品状态", help_text="商品状态", max_length=10,
-                              choices=(('pending', '待审核'), ('normal', '已上架'), ('offshelf', '下架'),
-                                       ('soldout', '售完')))
+                              choices=STATUS_CHOICES, default="待审核")
     sold_count = models.IntegerField(verbose_name="已售数量", help_text="已售数量", default=0)
 
     class Meta:
@@ -79,7 +85,7 @@ class GoodsComments(BaseModel):
                               related_name='goods_comments')
     user = models.ForeignKey(User, verbose_name="用户", help_text="用户", blank=True, null=True,
                              on_delete=models.CASCADE,
-                             related_name='user_comments')   # 在请求的时候会传递了
+                             related_name='user_comments')  # 在请求的时候会传递了
     parent = models.ForeignKey('self', verbose_name="商品的父评论", help_text="商品的父评论", blank=True, null=True,
                                on_delete=models.CASCADE, related_name='replies')
     comment = models.TextField(verbose_name="评论", help_text="评论", blank=False, null=False)

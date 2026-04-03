@@ -132,4 +132,4 @@ class GoodsCommentsIncreaseLikeNumSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = GoodsComments
-        fields = ["id", "is_increase_like_num"]
+        fields = ["comment_id", "is_increase_like_num","is_decrease_like_num"]
