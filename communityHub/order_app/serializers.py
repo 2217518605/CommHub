@@ -21,14 +21,20 @@ class OrderCommonSerializer(serializers.ModelSerializer):
     class Meta:
         model = Order
         exclude = ("user", "organization", "goods")
-        read_only_fields = ("id", "create_time", "update_time", "pay_price", "freight_price")
+        extra_kwargs = {
+            "goods_name": {"required": False},
+            "order_number": {"required": False},
+        }
+        read_only_fields = ("id", "create_time", "update_time", "pay_price")
 
     def validate(self, data):
         is_create = self.instance is None
+        current_user = self.context.get("user")
+        current_organization = self.context.get("organization")
         if is_create:
-            if not data.get("user_id"):
+            if not current_user and not data.get("user_id"):
                 raise serializers.ValidationError("用户ID不能为空")
-            if not data.get("organization_id"):
+            if not current_organization and not data.get("organization_id"):
                 raise serializers.ValidationError("组织ID不能为空")
 
         good_count = data.get("good_count", self.instance.good_count if self.instance else None)
@@ -173,7 +179,7 @@ class OrderQuerySerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Order
-        fields = ["query_order_number", "user_id", "organization_id", "status"]
+        fields = ["query_order_number", "user_id", "organization_id", "query_status"]
 
 
 class OrderStatusUpdateSerializer(serializers.ModelSerializer):

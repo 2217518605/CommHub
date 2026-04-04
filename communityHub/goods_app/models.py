@@ -8,11 +8,16 @@ from organization_app.models import Organization
 class Goods(BaseModel):
     """ 商品模型 """
 
+    STATUS_PENDING = "pending"
+    STATUS_NORMAL = "normal"
+    STATUS_OFFSHELF = "offshelf"
+    STATUS_SOLDOUT = "soldout"
+
     STATUS_CHOICES = (
-        ("pending", "待审核"),
-        ("normal", "已上架"),
-        ("offshelf", "已下架"),
-        ("soldout", "已售完"),
+        (STATUS_PENDING, "待审核"),
+        (STATUS_NORMAL, "已上架"),
+        (STATUS_OFFSHELF, "已下架"),
+        (STATUS_SOLDOUT, "已售完"),
     )
 
     organization = models.ForeignKey(Organization, on_delete=models.CASCADE, verbose_name="所属组织",

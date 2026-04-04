@@ -9,23 +9,42 @@ from goods_app.models import Goods
 class Order(BaseModel):
     """ 订单模型 """
 
+    STATUS_WAIT_PAY = 1
+    STATUS_WAIT_DELIVER = 2
+    STATUS_WAIT_RECEIVE = 3
+    STATUS_WAIT_COMMENT = 4
+    STATUS_FINISHED = 5
+    STATUS_CANCELLED = 6
+
     ORDER_STATUS_CHOICES = (
-        (1, "待付款"),
-        (2, "待发货"),
-        (3, "待收货"),
-        (4, "待评价"),
-        (5, "已完成"),
-        (6, "已取消"),
+        (STATUS_WAIT_PAY, "待付款"),
+        (STATUS_WAIT_DELIVER, "待发货"),
+        (STATUS_WAIT_RECEIVE, "待收货"),
+        (STATUS_WAIT_COMMENT, "待评价"),
+        (STATUS_FINISHED, "已完成"),
+        (STATUS_CANCELLED, "已取消"),
     )
+
+    PAY_METHOD_ALIPAY = 1
+    PAY_METHOD_WECHAT = 2
+    PAY_METHOD_CASH_ON_DELIVERY = 3
 
     PAY_METHOD_CHOICES = (
-        (1, "支付宝"),
-        (2, "微信"),
-        (3, "货到付款"),
+        (PAY_METHOD_ALIPAY, "支付宝"),
+        (PAY_METHOD_WECHAT, "微信"),
+        (PAY_METHOD_CASH_ON_DELIVERY, "货到付款"),
     )
 
+    SOURCE_WECHAT_MINI_PROGRAM = 1
+    SOURCE_H5 = 2
+    SOURCE_APP = 3
+    SOURCE_ADMIN = 4
+
     SOURCE_CHOICES = (
-        (1, "微信小程序"), (2, "H5"), (3, "App"), (4, "后台录入"),
+        (SOURCE_WECHAT_MINI_PROGRAM, "微信小程序"),
+        (SOURCE_H5, "H5"),
+        (SOURCE_APP, "App"),
+        (SOURCE_ADMIN, "后台录入"),
     )
 
     user = models.ForeignKey(User, verbose_name="用户", on_delete=models.CASCADE, related_name="user_order",
@@ -42,7 +61,7 @@ class Order(BaseModel):
     # 第三方交易流水号 (用于退款、对账)
     transaction_id = models.CharField(verbose_name="第三方流水号", max_length=64, blank=True, null=True, db_index=True)
 
-    status = models.IntegerField(choices=ORDER_STATUS_CHOICES, verbose_name="订单状态", default=1, blank=False,
+    status = models.IntegerField(choices=ORDER_STATUS_CHOICES, verbose_name="订单状态", default=STATUS_WAIT_PAY, blank=False,
                                  null=False)
 
     pay_time = models.DateTimeField(verbose_name="支付时间", blank=True, null=True)
@@ -62,7 +81,7 @@ class Order(BaseModel):
     courier_number = models.CharField(verbose_name="快递单号", max_length=128, blank=True, null=True)
     address = models.CharField(verbose_name="收货地址", max_length=255, blank=True, null=True)
     delivery_time = models.DateTimeField(verbose_name="发货时间", blank=True, null=True)
-    source = models.IntegerField(choices=SOURCE_CHOICES, verbose_name="订单来源", default=1)
+    source = models.IntegerField(choices=SOURCE_CHOICES, verbose_name="订单来源", default=SOURCE_WECHAT_MINI_PROGRAM)
 
     # 商品快照 (下单时复制，防止商品修改影响历史订单)
     goods_name = models.CharField(verbose_name="商品名称快照", max_length=255)
@@ -96,16 +115,26 @@ class OrderLog(BaseModel):
     """ 订单操作日志模型 """
 
     # 操作类型选择
+    ACTION_CREATE_ORDER = 1
+    ACTION_PAY_SUCCESS = 2
+    ACTION_DELIVER = 3
+    ACTION_CONFIRM_RECEIVE = 4
+    ACTION_CANCEL_ORDER = 5
+    ACTION_UPDATE_PRICE = 6
+    ACTION_UPDATE_ADDRESS = 7
+    ACTION_ADMIN_REMARK = 8
+    ACTION_SYSTEM_TIMEOUT = 9
+
     ACTION_CHOICES = (
-        (1, "创建订单"),
-        (2, "支付成功"),
-        (3, "商家发货"),
-        (4, "确认收货"),
-        (5, "取消订单"),
-        (6, "修改价格"),
-        (7, "修改地址"),
-        (8, "后台备注"),
-        (9, "系统超时"),
+        (ACTION_CREATE_ORDER, "创建订单"),
+        (ACTION_PAY_SUCCESS, "支付成功"),
+        (ACTION_DELIVER, "商家发货"),
+        (ACTION_CONFIRM_RECEIVE, "确认收货"),
+        (ACTION_CANCEL_ORDER, "取消订单"),
+        (ACTION_UPDATE_PRICE, "修改价格"),
+        (ACTION_UPDATE_ADDRESS, "修改地址"),
+        (ACTION_ADMIN_REMARK, "后台备注"),
+        (ACTION_SYSTEM_TIMEOUT, "系统超时"),
     )
 
     # 如果订单没了，日志通常也没意义
