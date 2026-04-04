@@ -101,7 +101,7 @@ class OrganizationListView(ViewSet):
             logger.info(f"组织 获取到的文件名是：{file_name}")
             file_path = os.path.join(os.path.dirname(__file__), self.EXPORT_DIR_NAME, file_name)
             if not os.path.exists(file_path):
-                logger.error(f"组织 获取组织列表文件错误：文件不存在")
+                logger.error(f"组织 获取组织列表文件错误：文件不存在",exc_info=True)
                 return common_response(status=status.HTTP_404_NOT_FOUND, message="组织列表文件不存在")
 
             try:
@@ -110,10 +110,10 @@ class OrganizationListView(ViewSet):
                     response['Content-Disposition'] = f"attachment; filename*=UTF-8''{file_name}"
                     return response
             except PermissionError:
-                logger.error(f"组织 文件下载错误：无读取权限，路径：{file_path}")
+                logger.error(f"组织 文件下载错误：无读取权限，路径：{file_path}", exc_info=True)
                 return common_response(status=status.HTTP_403_FORBIDDEN, message="文件读取失败")
             except IOError as e:
-                logger.error(f"组织 文件下载IO错误：{e}，路径：{file_path}")
+                logger.error(f"组织 文件下载IO错误：{e}，路径：{file_path}", exc_info=True)
                 return common_response(status=status.HTTP_500_INTERNAL_SERVER_ERROR, message="文件读取失败")
 
         except Exception as e:

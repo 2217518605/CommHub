@@ -1,0 +1,67 @@
+@host = http://localhost:8000
+@access_token = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoiYWNjZXNzIiwiZXhwIjoxNzc1MzU1NjA2LCJpYXQiOjE3NzUyNjkyMDYsImp0aSI6IjZlZjA2ZDkwZTZiYTQzMTM4ODkxMTY5MjEwMzBjZGRmIiwidXNlcl9pZCI6IjUifQ.r5L5e25YL5frtQfhTYHHWFjI8RA_vFEbXkcf6cpxvOs
+@user_id = 5
+@organization_id = 1
+@order_number = 20260404120501550646__16087407
+
+### 创建订单
+POST {{host}}/order/order_retrieve/
+Authorization: Bearer {{access_token}}
+Content-Type: application/json
+
+{
+  "good_count": 10,
+  "goods_id": 2,
+  "status": 1,
+  "pay_method": 1,
+  "freight_price": 8.00,
+  "source": 1,
+  "address": "广东省深圳市南山区科技园社区 1 栋 101",
+  "goods_spec": {
+    "color": "黑色",
+    "version": "标准版"
+  },
+  "user_remark": "快点帮我发货呀",
+  "admin_remark": "该用户要求快点发货"
+}
+
+> {%
+if (response.body && response.body.data && response.body.data.order_number) {
+  client.global.set("order_number", response.body.data.order_number);
+}
+%}
+
+### 修改订单
+PUT {{host}}/order/order_retrieve/
+Authorization: Bearer {{access_token}}
+Content-Type: application/json
+
+{
+  "order_number": "{{order_number}}",
+  "address": "广东省深圳市南山区科技园社区 2 栋 202",
+  "courier_person": "张三",
+  "courier_phone": "13800138000",
+  "delivery_time": "2026-04-05 10:30:00",
+  "goods_spec": {
+    "color": "银色",
+    "version": "升级版"
+  },
+  "user_remark": "我要改一下地址",
+  "admin_remark": "已更新收货信息"
+}
+
+### 查询订单列表
+POST {{host}}/order/order_list/
+Authorization: Bearer {{access_token}}
+Content-Type: application/json
+
+{
+  "user_id": {{user_id}},
+  "organization_id": {{organization_id}},
+  "query_status": 1,
+  "query_order_number": "{{order_number}}"
+}
+
+### 删除订单
+DELETE {{host}}/order/order_retrieve/{{order_number}}/
+Authorization: Bearer {{access_token}}

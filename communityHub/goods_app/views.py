@@ -14,7 +14,8 @@ from user_app.models import User
 from organization_app.models import Organization
 from goods_app.models import Goods, GoodsComments, GoodsLog, GoodsCommentsLog
 from goods_app.serializers import GoodsCommentsRetrieveSerializer, GoodsCommentsResponseSerializer, \
-    GoodsCommonSerializer, GoodsResponseSerializer, GoodsQueryByNameSerializer, GoodsCommentsSerializer,GoodsCommentsIncreaseLikeNumSerializer
+    GoodsCommonSerializer, GoodsResponseSerializer, GoodsQueryByNameSerializer, GoodsCommentsSerializer, \
+    GoodsCommentsIncreaseLikeNumSerializer
 from config.help_tools import common_response
 from config.authentication import IsAdmin, IsSuperAdmin, IsPublic, IsCommonUser
 from config.help_tools import CommonPageNumberPagination
@@ -68,14 +69,14 @@ class GoodsRetrieveViewSet(ViewSet):
             return common_response(status=status.HTTP_201_CREATED, message="商品创建成功",
                                    data=GoodsResponseSerializer(goods).data)
         else:
-            logger.error(f'商品 创建失败：商品信息：{serializer.errors}')
+            logger.error(f'商品 创建失败：商品信息：{serializer.errors}',exc_info=True)
             return common_response(status=status.HTTP_400_BAD_REQUEST, message="商品创建失败", data=serializer.errors)
 
     @api_doc(tags=["商品 修改单个商品"], request_body=GoodsCommonSerializer, response_body=GoodsResponseSerializer)
     @api_put
     def update(self, request, pk):
 
-        goods = get_object_or_404(Goods.objects.select_related('user', 'organization'), msg="要更新的商品不存在",pk=pk)
+        goods = get_object_or_404(Goods.objects.select_related('user', 'organization'), msg="要更新的商品不存在", pk=pk)
 
         if goods.user != request.user:
             logger.warning(f'用户 {request.user.username} 没有权限修改商品 {goods.name}')
@@ -94,7 +95,7 @@ class GoodsRetrieveViewSet(ViewSet):
             return common_response(status=status.HTTP_200_OK, message="商品修改成功",
                                    data=GoodsResponseSerializer(good).data)
         else:
-            logger.error(f'商品 修改失败：商品信息：{serializer.errors}')
+            logger.error(f'商品 修改失败：商品信息：{serializer.errors}',exc_info=True)
             return common_response(status=status.HTTP_400_BAD_REQUEST, message="商品修改失败", data=serializer.errors)
 
     @api_doc(tags=["商品 删除单个商品"], request_body=GoodsCommonSerializer, response_body=EmptySerializer)
@@ -258,7 +259,7 @@ class GoodsCommentsListViewSet(ViewSet):
 
         # 获取商品评论（一次50条，获取更多就刷新一次接口）
         comments_list = GoodsComments.objects.select_related('user', 'goods').filter(goods_id=goods_id,
-                                                                                                     parent=None).order_by(
+                                                                                     parent=None).order_by(
             '-create_time', '-id')[:settings.MAX_COMMENT_COUNT]
 
         logger.info(f'商品 获取成功,商品条数为：{comments_list.count()}')
@@ -271,11 +272,12 @@ class GoodsCommentsListViewSet(ViewSet):
             "data": serializer.data
         })
 
-class GoodsCommentsLikeNumViewSet(ViewSet):
 
+class GoodsCommentsLikeNumViewSet(ViewSet):
     perimissions = [IsCommonUser]
 
-    @api_doc(tags=["商品评论 点赞数增加"],request_body=GoodsCommentsIncreaseLikeNumSerializer,response_body=EmptySerializer)
+    @api_doc(tags=["商品评论 点赞数增加"], request_body=GoodsCommentsIncreaseLikeNumSerializer,
+             response_body=EmptySerializer)
     @api_post
     def increase_like_num(self, request):
 
@@ -288,13 +290,15 @@ class GoodsCommentsLikeNumViewSet(ViewSet):
             return common_response(status=status.HTTP_400_BAD_REQUEST, message="不能同时增加和减少")
 
         if is_increase_like_num:
-            comment = get_object_or_404(GoodsComments.objects.select_related('user', 'goods'),msg="商品评论不存在",pk=good_comment_id)
+            comment = get_object_or_404(GoodsComments.objects.select_related('user', 'goods'), msg="商品评论不存在",
+                                        pk=good_comment_id)
             comment.like_num += 1
             comment.save()
             logger.info(f'商品评论 点赞数增加成功：商品评论ID：{good_comment_id}')
             return common_response(status=status.HTTP_200_OK, message="商品评论点赞数增加成功")
         if is_decrease_like_num:
-            comment = get_object_or_404(GoodsComments.objects.select_related('user', 'goods'),msg="商品评论不存在",pk=good_comment_id)
+            comment = get_object_or_404(GoodsComments.objects.select_related('user', 'goods'), msg="商品评论不存在",
+                                        pk=good_comment_id)
             comment.like_num -= 1
             comment.save()
             logger.info(f'商品评论 点赞数减少成功：商品评论ID：{good_comment_id}')
