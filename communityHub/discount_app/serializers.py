@@ -3,7 +3,7 @@ import logging
 from rest_framework import serializers
 from django.utils import timezone
 
-from discount_app.models import CouponTemplate
+from discount_app.models import CouponTemplate, UserCoupon
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +24,7 @@ class CouponTemplateSerializer(serializers.ModelSerializer):
             "valid_from": {"write_only": True},
             "valid_to": {"write_only": True}
         }
+        fields = "__all__"
 
     def validate_valid_from(self, value):
         if value < timezone.now():
@@ -76,4 +77,22 @@ class CouponTemplateResponseSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = CouponTemplate
+        fields = "__all__"
+
+
+class UserCouponSerializer(serializers.ModelSerializer):
+    """ 用户优惠券序列化器 """
+
+    coupon_template_id = serializers.IntegerField(write_only=True, required=True, help_text="优惠券模板id")
+
+    class Meta:
+        model = UserCoupon
+        fields = ["coupon_template_id"]
+
+
+class UserCouponResponseSerializer(serializers.ModelSerializer):
+    """ 用户优惠券返参序列化器 """
+
+    class Meta:
+        model = UserCoupon
         fields = "__all__"
