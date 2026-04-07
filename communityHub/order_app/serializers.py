@@ -17,6 +17,7 @@ class OrderCommonSerializer(serializers.ModelSerializer):
     user_id = serializers.IntegerField(help_text="用户ID", required=False)
     organization_id = serializers.IntegerField(help_text="组织ID", required=False)
     goods_id = serializers.IntegerField(help_text="商品ID", required=False, allow_null=True)
+    user_coupon_id = serializers.IntegerField(help_text="用户使用的优惠券id", required=False, allow_null=True)
 
     class Meta:
         model = Order

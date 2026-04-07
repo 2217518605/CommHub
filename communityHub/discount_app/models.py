@@ -4,7 +4,6 @@ from django.db import models
 from models.base import BaseModel
 from user_app.models import User
 from organization_app.models import Organization
-from order_app.models import Order
 
 
 class CouponTemplate(BaseModel):
@@ -93,7 +92,7 @@ class UserCoupon(BaseModel):
                                         related_name="template_coupons")
     organization = models.ForeignKey(Organization, verbose_name="所属机构", on_delete=models.SET_NULL,
                                      related_name="organization_coupons", null=True)
-    order = models.ForeignKey(Order, verbose_name="关联订单", on_delete=models.SET_NULL, related_name="order_coupons",
+    order = models.ForeignKey("order_app.Order", verbose_name="关联订单", on_delete=models.SET_NULL, related_name="order_coupons",
                               null=True)
 
     used_time = models.DateTimeField(blank=True, null=True, verbose_name="使用时间")

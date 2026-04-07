@@ -75,6 +75,8 @@ class UserCouponViewSet(ViewSet):
     @api_doc(tags=["优惠券 用户领取优惠券"], request_body=UserCouponSerializer,
              response_body=CouponTemplateResponseSerializer)
     @transaction.atomic
+    @method_decorator(ratelimit(key='user', rate='10/m', method='POST', block=True))
+    @method_decorator(ratelimit(key='ip', rate='30/m', method='POST', block=True))
     @api_post
     def create(self, request):
 
