@@ -52,7 +52,7 @@ INSTALLED_APPS = [
     'goods_app',  # 商品应用
     'order_app',  # 订单应用
     'discount_app',  # 优惠券应用
-    'django_celery_beat',  # 定时任务
+    # 'django_celery_beat',  # 定时任务
 ]
 
 MIDDLEWARE = [
@@ -296,11 +296,16 @@ MAX_REPLY_DISPLAY_COUNT = 5  # 商品评论回复显示最大数量（一次）
 MAX_COMMENT_COUNT = 50  # 商品评论显示最大数量（一次）,再获取就刷新一次接口
 
 # Celery 配置
-BROKER_URL = 'redis://127.0.0.1:6379/0'  # broker
+CELERY_BROKER_URL = 'redis://127.0.0.1:6379/0'  # broker
 CELERY_RESULT_BACKEND = 'redis://127.0.0.1:6379/2'  # backend
 CELERY_RESULT_SERIALIZER = 'json'  # 结果序列化方案
 CELERY_TASK_RESULT_EXPIRES = 60 * 60 * 24 * 7  # 结果过期时间
 CELERY_TIMEZONE = 'Asia/Shanghai'
 
+# 显式指定 Celery 任务所在的模块
+CELERY_IMPORTS = [
+    'celery_tasks.clear_expire_coupon',
+]
+
 # 告诉 Celery 使用 django_celery_beat 作为调度器
-CELERY_BEAT_SCHEDULER = 'django_celery_beat.schedulers:DatabaseScheduler'
+# CELERY_BEAT_SCHEDULER = 'django_celery_beat.schedulers:DatabaseScheduler'

@@ -74,6 +74,7 @@ class UserCouponViewSet(ViewSet):
 
     @api_doc(tags=["优惠券 用户领取优惠券"], request_body=UserCouponSerializer,
              response_body=CouponTemplateResponseSerializer)
+    @transaction.atomic
     @api_post
     def create(self, request):
 
@@ -99,62 +100,61 @@ class UserCouponViewSet(ViewSet):
             )
 
         try:
-            with transaction.atomic():
-                # 检测库存：
-                if coupon_template.total_count > 0:
-                    # 必须再检测一次，因为select_for_update() 锁的是行
-                    if coupon_template.total_count <= 0:
-                        return common_response(
-                            status.HTTP_400_BAD_REQUEST, message="该优惠券已经被抢光了，无库存"
-                        )
-                    # 库存减1（高并发下必须再查一次，避免是旧数据）(原子操作)
-                    count = CouponTemplate.objects.filter(id=coupon_template_id, total_count__gt=0).update(
-                        total_count=F("total_count") - 1)
-                    if count == 0:
-                        return common_response(
-                            status.HTTP_400_BAD_REQUEST, message="该优惠券已经被抢光了，无库存"
-                        )
-                    # 刷新coupon_template 对象
-                    coupon_template.refresh_from_db()
+            # 检测库存：
+            if coupon_template.total_count > 0:
+                # 必须再检测一次，因为select_for_update() 锁的是行
+                if coupon_template.total_count <= 0:
+                    return common_response(
+                        status.HTTP_400_BAD_REQUEST, message="该优惠券已经被抢光了，无库存"
+                    )
+                # 库存减1（高并发下必须再查一次，避免是旧数据）(原子操作)
+                count = CouponTemplate.objects.filter(id=coupon_template_id, total_count__gt=0).update(
+                    total_count=F("total_count") - 1)
+                if count == 0:
+                    return common_response(
+                        status.HTTP_400_BAD_REQUEST, message="该优惠券已经被抢光了，无库存"
+                    )
+                # 刷新coupon_template 对象
+                coupon_template.refresh_from_db()
 
-                # 检测用户领取数量限制
-                if coupon_template.person_limit_count > 0:
-                    count = UserCoupon.objects.filter(user=request.user,
-                                                      coupon_template_id=coupon_template_id).count()
-                    if count >= coupon_template.person_limit_count:
-                        return common_response(
-                            status.HTTP_400_BAD_REQUEST,
-                            message=f"每个用户限领{coupon_template.person_limit_count}张优惠券"
-                        )
+            # 检测用户领取数量限制
+            if coupon_template.person_limit_count > 0:
+                count = UserCoupon.objects.filter(user=request.user,
+                                                  coupon_template_id=coupon_template_id).count()
+                if count >= coupon_template.person_limit_count:
+                    return common_response(
+                        status.HTTP_400_BAD_REQUEST,
+                        message=f"每个用户限领{coupon_template.person_limit_count}张优惠券"
+                    )
 
-                # 发劵：
-                user_coupon = UserCoupon.objects.create(
-                    user=request.user,
-                    coupon_template=coupon_template,
-                    organization=request.user.organization,
-                    valid_from=coupon_template.valid_from,
-                    valid_to=coupon_template.valid_to,
-                    order=None,
-                    used_time=None,
-                    status=0,
-                    snapshot_value=coupon_template.discount,
-                    snapshot_min_purchase=coupon_template.min_purchase
-                )
+            # 发劵：
+            user_coupon = UserCoupon.objects.create(
+                user=request.user,
+                coupon_template=coupon_template,
+                organization=request.user.organization,
+                valid_from=coupon_template.valid_from,
+                valid_to=coupon_template.valid_to,
+                order=None,
+                used_time=None,
+                status=0,
+                snapshot_value=coupon_template.discount,
+                snapshot_min_purchase=coupon_template.min_purchase
+            )
 
-                # 记录领取日志
-                CouponReceiveLog.objects.create(
-                    user=request.user,
-                    template=coupon_template,
-                    user_coupon=user_coupon,
-                    organization=request.user.organization,
-                    receive_type=request.data.get("receive_type", 1),
-                    status=1,
-                    ip=get_client_ip(request)
-                )
-                logger.info(
-                    f"用户领取优惠券成功，id:{user_coupon.id}, 优惠券模版id:{coupon_template.id}, 用户id:{request.user.id}")
-                return common_response(
-                    status.HTTP_200_OK, "领取优惠券成功", CouponTemplateResponseSerializer(coupon_template).data)
+            # 记录领取日志
+            CouponReceiveLog.objects.create(
+                user=request.user,
+                template=coupon_template,
+                user_coupon=user_coupon,
+                organization=request.user.organization,
+                receive_type=request.data.get("receive_type", 1),
+                status=1,
+                ip=get_client_ip(request)
+            )
+            logger.info(
+                f"用户领取优惠券成功，id:{user_coupon.id}, 优惠券模版id:{coupon_template.id}, 用户id:{request.user.id}")
+            return common_response(
+                status.HTTP_200_OK, "领取优惠券成功", CouponTemplateResponseSerializer(coupon_template).data)
         except Exception as e:
             logger.error(
                 f"用户领取优惠券失败，优惠券模版id:{coupon_template.id}, 用户id:{request.user.id}, 错误信息:{e}")
