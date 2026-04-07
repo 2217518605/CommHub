@@ -53,15 +53,17 @@ class Order(BaseModel):
                                      related_name="organization_order", blank=False, null=False)
     goods = models.ForeignKey(Goods, verbose_name="商品", on_delete=models.SET_NULL, related_name="goods_order",
                               null=True, blank=True)
-    # coupon = models.ForeignKey("Coupon", verbose_name="优惠券", on_delete=models.CASCADE, related_name="coupon_order",
-    #                            blank=True, null=True) # 后续和优惠卷模型关联进行金额操作
+    user_coupon = models.ForeignKey("discount_app.UserCoupon", verbose_name="用户领取的优惠券", on_delete=models.CASCADE,
+                                    related_name="user_coupon_order",
+                                    blank=True, null=True)  # 后续和优惠卷模型关联进行金额操作
 
     order_number = models.CharField(verbose_name="订单编号", max_length=128, blank=False, null=False, unique=True,
                                     db_index=True)
     # 第三方交易流水号 (用于退款、对账)
     transaction_id = models.CharField(verbose_name="第三方流水号", max_length=64, blank=True, null=True, db_index=True)
 
-    status = models.IntegerField(choices=ORDER_STATUS_CHOICES, verbose_name="订单状态", default=STATUS_WAIT_PAY, blank=False,
+    status = models.IntegerField(choices=ORDER_STATUS_CHOICES, verbose_name="订单状态", default=STATUS_WAIT_PAY,
+                                 blank=False,
                                  null=False)
 
     pay_time = models.DateTimeField(verbose_name="支付时间", blank=True, null=True)

@@ -14,6 +14,7 @@ from goods_app.models import Goods
 from order_app.models import Order, OrderLog
 from order_app.serializers import OrderCommonSerializer, OrderQuerySerializer, OrderResponseSerializer
 from order_app.validators import create_courier_number, create_order_number, create_transaction_id
+from discount_app.models import UserCoupon
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +27,7 @@ class OrderRetrieveViewSet(ViewSet):
     @method_decorator(ratelimit(key="ip", rate="5/m", block=True, method="POST"))  # 防止恶意刷单
     def create(self, request):
         user = request.user
+        user_coupon_id = request.data.get("user_coupon_id")
         if not user:
             logger.warning("订单 不存在用户登录信息，无法创建订单")
             return common_response(status=status.HTTP_400_BAD_REQUEST, message="订单 不存在用户登录信息，无法创建订单")
@@ -44,6 +46,11 @@ class OrderRetrieveViewSet(ViewSet):
         goods = get_object_or_404(Goods.objects.select_related("user", "organization"), msg="商品不存在",
                                   id=serializer.validated_data.get("goods_id"))
 
+        if user_coupon_id:
+            user_coupon = get_object_or_404(UserCoupon.objects.select_related("coupon_template"),
+                                            msg="用户优惠券不存在",
+                                            id=user_coupon_id)
+
         if goods.organization_id != org.id:
             logger.warning("订单 商品不属于当前用户组织，无法创建订单")
             return common_response(status=status.HTTP_400_BAD_REQUEST,
@@ -55,10 +62,17 @@ class OrderRetrieveViewSet(ViewSet):
 
         good_count = serializer.validated_data["good_count"]
         freight_price = serializer.validated_data.get("freight_price") or Decimal("0")
-        discount_price = serializer.validated_data.get("discount_price") or Decimal("0")
+        discount_price = user_coupon.snapshot_value if user_coupon else Decimal("0")  # 优惠价格
         total_price = goods.price * good_count
-        pay_price = total_price - discount_price + freight_price
 
+        if user_coupon:
+            snapshot_min_purchase = user_coupon.snapshot_min_purchase
+            if total_price < snapshot_min_purchase:
+                logger.warning("订单 优惠券不满足最低使用金额，无法创建订单")
+                return common_response(status=status.HTTP_400_BAD_REQUEST,
+                                       message="订单 优惠券不满足最低使用金额，无法创建订单")
+
+        pay_price = total_price - discount_price + freight_price
         try:
             with transaction.atomic():
                 order = Order.objects.create(

@@ -1,0 +1,85 @@
+@access_token = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoiYWNjZXNzIiwiZXhwIjoxNzc1NjUxMzU4LCJpYXQiOjE3NzU1NjQ5NTgsImp0aSI6IjU5YTBjODZkZWMyZTQ5OTBhYmUzMzRhYzMzZDgyMjkzIiwidXNlcl9pZCI6IjUifQ.fIG-0ml_SpUOaJgLuhu4zpYhrD2ARF0WVE_rpup1AkA
+
+### 创建优惠券模板
+POST http://localhost:8000/discount/coupon_template/
+Authorization: Bearer {{access_token}}
+Content-Type: application/json
+
+{
+  "name": "春节全场满减券",
+  "description": "满100减20",
+  "type": 1,
+  "min_purchase": 10000,
+  "discount": 2000,
+  "total_count": 100,
+  "person_limit_count": 2,
+  "is_active": true,
+  "scope_desc": "全场通用",
+  "valid_from": "2026-04-08 00:00:00",
+  "valid_to": "2026-12-31 23:59:59"
+}
+
+### 创建折扣券模板
+POST http://localhost:8000/discount/coupon_template/
+Authorization: Bearer {{access_token}}
+Content-Type: application/json
+
+{
+  "name": "超级折扣券",
+  "description": "全场8折",
+  "type": 2,
+  "min_purchase": 0,
+  "discount": 8,
+  "total_count": 50,
+  "person_limit_count": 1,
+  "is_active": true,
+  "scope_desc": "部分商品可用",
+  "valid_from": "2026-04-08 00:00:00",
+  "valid_to": "2026-12-31 23:59:59"
+}
+
+### 创建无门槛现金券模板
+POST http://localhost:8000/discount/coupon_template/
+Authorization: Bearer {{access_token}}
+Content-Type: application/json
+
+{
+  "name": "无门槛现金券",
+  "description": "直接抵扣5元",
+  "type": 3,
+  "min_purchase": 0,
+  "discount": 500,
+  "total_count": 200,
+  "person_limit_count": 1,
+  "is_active": true,
+  "scope_desc": "新用户专享",
+  "valid_from": "2026-04-08 00:00:00",
+  "valid_to": "2026-12-31 23:59:59"
+}
+
+
+### 修改优惠券模板
+PUT http://localhost:8000/discount/coupon_template/1/
+Authorization: Bearer {{access_token}}
+Content-Type: application/json
+
+{
+  "name": "春节全场满减券 (修改版)",
+  "description": "满100减20，不限商品",
+  "valid_from": "2026-04-07 00:00:00",
+  "valid_to": "2027-01-01 23:59:59",
+  "total_count": 200,
+  "person_limit_count": 3,
+  "scope_desc": "全场通用，修改说明"
+}
+
+
+### 用户领取优惠券
+POST http://localhost:8000/discount/user_coupon/
+Authorization: Bearer {{access_token}}
+Content-Type: application/json
+
+{
+  "coupon_template_id": 1,
+  "receive_type": 1
+}

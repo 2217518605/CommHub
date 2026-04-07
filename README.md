@@ -2,7 +2,7 @@
 
 #### 介绍
 这是 "邻里汇" 平台的后台代码，”邻里汇“平台，集成社区管理、购物、评论、组织等等模块于一起的一个平台。
-主要功能是：用户中心、设备模块、购物车模块、用餐模块、报表中心、订单模块、会员模块、优惠卷模块、商城模块、社区模块。组织模块
+主要功能是：用户中心、购物车模块、报表中心、订单模块、会员模块、优惠卷模块、商城模块、社区模块。组织模块
 
 #### 软件架构
 本项目基于 Django 框架进行开发，搭配mysql数据库、redis数据库、mongodb数据库，celery框架进行开发。
@@ -27,6 +27,7 @@ $ pip install -r requirements.txt -i https://mirrors.aliyun.com/pypi/simple/
 7、启动 redis 服务：redis-server reids-cli
 
 8、启动服务 python manage.py runserver
+（注意切换到manage.py所在目录下再执行该命令）
 
 
 #### 导出 swagger 文档
