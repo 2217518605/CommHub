@@ -35,6 +35,7 @@ class Goods(BaseModel):
     status = models.CharField(verbose_name="商品状态", help_text="商品状态", max_length=10,
                               choices=STATUS_CHOICES, default="待审核")
     sold_count = models.IntegerField(verbose_name="已售数量", help_text="已售数量", default=0)
+    is_hot = models.BooleanField(verbose_name="是否热门", help_text="是否热门", default=False)
 
     class Meta:
         db_table = "t_goods"

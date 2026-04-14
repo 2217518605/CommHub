@@ -157,22 +157,27 @@ STATICFILES_DIRS = [
 # 执行 collectstatic 命令后，所有静态文件会被复制到该目录
 STATIC_ROOT = BASE_DIR / 'collected_static'
 
-# CACHES = {
-#     "default":{
-#         "BACKEND": "django.core.cache.backends.redis.RedisCache",
-#         "LOCATION": "redis://127.0.0.1:6379", # 缓存的地址
-#         "TIMEOUT": 300,
-#         "OPTIONS":{
-#             "db":1,
-#             # "PASSWORD": "123456",
-#             'pool_class': 'redis.BlockingConnectionPool',  # 缓存的连接池
-#         }
-#     }
-# }
-#
-# CACHE_MIDDLEWARE_ALIAS = "default"
-# CACHE_MIDDLEWARE_SECONDS = 10 # 缓存的过期时间,10秒
-# CACHE_MIDDLEWARE_KEY_PREFIX = "cache" # 缓存的键的前缀
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.redis.RedisCache",
+        "LOCATION": "redis://127.0.0.1:6379/1",
+        "TIMEOUT": 300,
+        "OPTIONS": {
+            "db": 1,
+            "pool_class": "redis.BlockingConnectionPool",
+        },
+    }
+}
+
+CACHE_MIDDLEWARE_ALIAS = "default"
+CACHE_MIDDLEWARE_SECONDS = 10
+CACHE_MIDDLEWARE_KEY_PREFIX = "cache"
+
+# 商品热门搜索缓存配置
+GOODS_HOT_CACHE_TIMEOUT = 300
+GOODS_HOT_CACHE_PREFIX = "goods:hot"
+GOODS_HOT_QUERY_CACHE_PREFIX = "goods:hot:query"
+GOODS_HOT_CACHE_VERSION_KEY = "goods:hot:version"
 
 # 如果是生产环境关闭全局允许（默认是 False，显式设置更安全）
 CORS_ALLOW_ALL_ORIGINS = True  # 开发环境
