@@ -3,26 +3,49 @@ import logging
 # from django.shortcuts import get_object_or_404
 from django.db import transaction
 from django.conf import settings
+from django.core.cache import cache
 from rest_framework.viewsets import ViewSet
-from rest_framework.response import Response
 from rest_framework import status
-from rest_framework.permissions import AllowAny
-from rest_framework.decorators import permission_classes
 
 from config.decorators.common import api_doc, api_get, api_post, api_put, api_delete
 from user_app.models import User
-from organization_app.models import Organization
 from goods_app.models import Goods, GoodsComments, GoodsLog, GoodsCommentsLog
 from goods_app.serializers import GoodsCommentsRetrieveSerializer, GoodsCommentsResponseSerializer, \
     GoodsCommonSerializer, GoodsResponseSerializer, GoodsQueryByNameSerializer, GoodsCommentsSerializer, \
     GoodsCommentsIncreaseLikeNumSerializer
 from config.help_tools import common_response
-from config.authentication import IsAdmin, IsSuperAdmin, IsPublic, IsCommonUser
+from config.authentication import IsPublic, IsCommonUser
 from config.help_tools import CommonPageNumberPagination
 from config.serializers.base import EmptySerializer
 from config.help_tools import get_client_ip, get_object_or_404
 
 logger = logging.getLogger(__name__)
+
+
+def _goods_search_cache_key(query_name, page_number, page_size):
+    """构造商品搜索缓存键"""
+
+    version = cache.get(getattr(settings, "GOODS_HOT_CACHE_VERSION_KEY", "goods:hot:version"), 1)
+    normalized_query = (query_name or "").strip().lower()
+    prefix = getattr(settings, "GOODS_HOT_QUERY_CACHE_PREFIX", "goods:hot:query")
+    return f"{prefix}:{version}:{normalized_query}:p{page_number}:s{page_size}"
+
+
+def _page_size_from_request(request):
+    try:
+        return int(request.data.get("page_size") or CommonPageNumberPagination.page_size)
+    except (TypeError, ValueError):
+        return CommonPageNumberPagination.page_size
+
+
+def _invalidate_goods_hot_cache():
+    """通过版本号失效热门商品搜索缓存"""
+
+    version_key = getattr(settings, "GOODS_HOT_CACHE_VERSION_KEY", "goods:hot:version")
+    try:
+        cache.incr(version_key)
+    except ValueError:
+        cache.set(version_key, 1)
 
 
 class GoodsRetrieveViewSet(ViewSet):
@@ -60,6 +83,7 @@ class GoodsRetrieveViewSet(ViewSet):
         serializer = GoodsCommonSerializer(data=request.data)
         if serializer.is_valid():
             goods = serializer.save(user=user, organization=org)
+            _invalidate_goods_hot_cache()
 
             # 创建商品操作日志
             GoodsLog.objects.create(goods_id=goods.id, goods_name=goods.name, operation_type="create", user=user,
@@ -85,6 +109,7 @@ class GoodsRetrieveViewSet(ViewSet):
         serializer = GoodsCommonSerializer(goods, data=request.data)
         if serializer.is_valid():
             good = serializer.save()
+            _invalidate_goods_hot_cache()
 
             GoodsLog.objects.create(goods_id=goods.id, goods_name=goods.name, operation_type="update",
                                     user=request.user,
@@ -114,6 +139,7 @@ class GoodsRetrieveViewSet(ViewSet):
                                 remark="删除商品")
 
         goods.delete()
+        _invalidate_goods_hot_cache()
         logger.info(f'商品 删除成功：商品ID：{pk}')
         return common_response(status=status.HTTP_200_OK, message="商品删除成功")
 
@@ -128,22 +154,27 @@ class GoodsListViewSet(ViewSet):
     def list_by_query_name(self, request):
 
         query_name = request.data.get("query_name")
+        page_number = request.data.get("page", 1)
+        page_size = _page_size_from_request(request)
+        cache_key = _goods_search_cache_key(query_name, page_number, page_size)
+        cached_response = cache.get(cache_key)
+        if cached_response is not None:
+            logger.info(f'商品 搜索命中缓存：query_name={query_name}, page={page_number}')
+            return common_response(status=status.HTTP_200_OK, message="获取商品列表成功", data=cached_response)
+
+        goods_queryset = Goods.objects.select_related("user", "organization").filter(status=Goods.STATUS_NORMAL)
         if query_name:
-            goods_list = Goods.objects.select_related("user", "organization").filter(
-                name__icontains=query_name).order_by('-create_time', '-id')
-        else:
-            goods_list = Goods.objects.select_related("user", "organization").order_by('-create_time', '-id')
-        logger.info(f'商品 获取成功,商品条数为：{goods_list.count()}')
+            goods_queryset = goods_queryset.filter(name__icontains=query_name)
+
+        goods_list = goods_queryset.order_by('-is_hot', '-create_time', '-id')
+        logger.info(f'商品 搜索查询成功,商品条数为：{goods_list.count()}')
 
         paginator = self.pagination_class()
         pagination_data = paginator.paginate_queryset(goods_list, request)
-
         serializer = GoodsResponseSerializer(pagination_data, many=True)
-        return paginator.get_paginated_response({
-            "status": status.HTTP_200_OK,
-            "message": "获取商品列表成功",
-            "data": serializer.data
-        })
+        response_body = paginator.get_paginated_response(serializer.data)
+        cache.set(cache_key, response_body.data, timeout=getattr(settings, "GOODS_HOT_CACHE_TIMEOUT", 300))
+        return response_body
 
 
 class GoodsCommentsRetrieveViewSet(ViewSet):
