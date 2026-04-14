@@ -79,5 +79,5 @@ POST http://localhost:8000/goods/goods_list_by_query_name/
 Content-Type: application/json
 
 {
-  "query_name": "iphone17promax"
+  "query_name": "iphone"
 }
