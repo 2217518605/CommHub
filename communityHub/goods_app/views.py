@@ -158,7 +158,7 @@ class GoodsListViewSet(ViewSet):
         page_size = _page_size_from_request(request)
         cache_key = _goods_search_cache_key(query_name, page_number, page_size)
         cached_response = cache.get(cache_key)
-        if cached_response:
+        if cached_response is not None:
             logger.info(f'商品 搜索命中缓存：query_name={query_name}, page={page_number}')
             return common_response(status=status.HTTP_200_OK, message="获取商品列表成功", data=cached_response)
 
@@ -172,13 +172,9 @@ class GoodsListViewSet(ViewSet):
         paginator = self.pagination_class()
         pagination_data = paginator.paginate_queryset(goods_list, request)
         serializer = GoodsResponseSerializer(pagination_data, many=True)
-        response_data = {
-            "status": status.HTTP_200_OK,
-            "message": "获取商品列表成功",
-            "data": serializer.data
-        }
-        cache.set(cache_key, response_data, timeout=getattr(settings, "GOODS_HOT_CACHE_TIMEOUT", 300))
-        return paginator.get_paginated_response(response_data)
+        response_body = paginator.get_paginated_response(serializer.data)
+        cache.set(cache_key, response_body.data, timeout=getattr(settings, "GOODS_HOT_CACHE_TIMEOUT", 300))
+        return response_body
 
 
 class GoodsCommentsRetrieveViewSet(ViewSet):
