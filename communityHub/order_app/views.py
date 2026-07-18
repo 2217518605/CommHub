@@ -2,11 +2,13 @@ import logging
 from decimal import Decimal
 
 from django.db import transaction
+from django.http import HttpResponse
 from django_ratelimit.decorators import ratelimit
 from django.utils.decorators import method_decorator
 from rest_framework import status
 from rest_framework.viewsets import ViewSet
 
+from config.alipay import AlipayClient
 from config.authentication import IsCommonUser
 from config.decorators.common import api_delete, api_doc, api_post, api_put
 from config.help_tools import CommonPageNumberPagination, common_response, get_client_ip, get_object_or_404
@@ -62,7 +64,7 @@ class OrderRetrieveViewSet(ViewSet):
 
         good_count = serializer.validated_data["good_count"]
         freight_price = serializer.validated_data.get("freight_price") or Decimal("0")
-        discount_price = user_coupon.snapshot_value if user_coupon else Decimal("0")  # 优惠价格
+        discount_price = user_coupon.snapshot_value if user_coupon else Decimal("0")
         total_price = goods.price * good_count
 
         if user_coupon:
@@ -178,8 +180,8 @@ class OrderRetrieveViewSet(ViewSet):
                                         ip_address=get_client_ip(request))
 
                 if order.status == Order.STATUS_WAIT_PAY:
-                    order.status = Order.STATUS_CANCELLED  # 未支付的订单改为已经取消状态
-                order.is_deleted = True  # 逻辑上删除
+                    order.status = Order.STATUS_CANCELLED
+                order.is_deleted = True
                 order.save()
 
                 logger.info(f"订单 删除订单{order_number}成功,订单删除人为：{user.username}")
@@ -189,43 +191,86 @@ class OrderRetrieveViewSet(ViewSet):
             return common_response(status=status.HTTP_500_INTERNAL_SERVER_ERROR, message="订单 删除订单失败")
 
 
-class OrderListView(ViewSet):
+class OrderPaymentViewSet(ViewSet):
     permission_classes = [IsCommonUser]
-    pagination_class = CommonPageNumberPagination
 
-    @api_doc(tags=["订单 用户的订单列表"], request_body=OrderQuerySerializer, response_body=OrderResponseSerializer)
+    @api_doc(tags=["订单 生成支付宝支付链接"], request_body=None, response_body=None)
     @api_post
-    @method_decorator(ratelimit(key="ip", rate="5/m", block=True, method="POST"))
-    def list(self, request):
-        user = request.user
-        user_id = user.id  # 强制要求是登录用户的用户id，不给前端传入
-        organization_id = user.organization_id  # 强制要求是登录用户的组织id，不给前端传入
-        query_status = request.data.get("query_status")
-        query_order_number = request.data.get("query_order_number")
+    def create(self, request):
+        order_number = request.data.get("order_number")
+        order = get_object_or_404(Order.objects.select_related("user", "organization", "goods"), msg="订单不存在",
+                                  order_number=order_number)
 
-        base_queryset = Order.objects.filter(user_id=user_id, is_deleted=False).select_related("user",
-                                                                                               "organization").order_by(
-            "-create_time", "-id")
+        if order.user_id != request.user.id:
+            return common_response(status=status.HTTP_403_FORBIDDEN, message="无权操作该订单")
+        if order.status != Order.STATUS_WAIT_PAY:
+            return common_response(status=status.HTTP_400_BAD_REQUEST, message="订单当前状态不允许支付")
+        if order.pay_method != Order.PAY_METHOD_ALIPAY:
+            return common_response(status=status.HTTP_400_BAD_REQUEST, message="当前订单不是支付宝支付方式")
 
-        order_queryset = base_queryset
+        client = AlipayClient()
+        try:
+            payment = client.build_payment_url(
+                order_number=order.order_number,
+                total_amount=order.pay_price,
+                subject=order.goods_name,
+                body=f"订单支付-{order.order_number}",
+            )
+        except Exception as exc:
+            logger.error("生成支付宝支付链接失败: %s", exc, exc_info=True)
+            return common_response(status=status.HTTP_500_INTERNAL_SERVER_ERROR, message="生成支付宝支付链接失败")
 
-        if query_order_number:
-            order_queryset = order_queryset.filter(order_number__icontains=query_order_number)
-        if organization_id:
-            order_queryset = order_queryset.filter(organization_id=organization_id)
-        if query_status not in [None, ""]:
-            order_queryset = order_queryset.filter(status=query_status)
-
-        paginator = self.pagination_class()
-        pagination_data = paginator.paginate_queryset(order_queryset, request)
-        if pagination_data is None:
-            pagination_data = []
-
-        serializer = OrderResponseSerializer(pagination_data, many=True)
-
-        logger.info(f'订单 用户订单查询成功,用户为：{user.username}')
-        return paginator.get_paginated_response({
-            "status": status.HTTP_200_OK,
-            "message": "订单 用户订单查询成功",
-            "data": serializer.data
+        return common_response(status=status.HTTP_200_OK, message="生成支付宝支付链接成功", data={
+            "order_number": payment.order_number,
+            "pay_url": payment.pay_url,
+            "out_trade_no": payment.out_trade_no,
+            "total_amount": payment.total_amount,
         })
+
+
+class AlipayNotifyViewSet(ViewSet):
+    authentication_classes = []
+    permission_classes = []
+
+    @api_doc(tags=["订单 处理支付宝异步通知回调"], request_body=None, response_body=None)
+    def post(self, request):
+        client = AlipayClient()
+        payload = request.data.dict() if hasattr(request.data, "dict") else dict(request.data)
+        if not client.verify_notify(payload):
+            return HttpResponse("failure", status=400)
+
+        trade_status = payload.get("trade_status")
+        out_trade_no = payload.get("out_trade_no")
+        trade_no = payload.get("trade_no")
+        total_amount = payload.get("total_amount")
+
+        if trade_status not in {"TRADE_SUCCESS", "TRADE_FINISHED"}:
+            return HttpResponse("success")
+
+        try:
+            with transaction.atomic():
+                order = Order.objects.select_for_update().get(order_number=out_trade_no)
+                if order.status == Order.STATUS_WAIT_PAY:
+                    order.status = Order.STATUS_WAIT_DELIVER
+                    order.pay_method = Order.PAY_METHOD_ALIPAY
+                    order.pay_time = order.pay_time or order.create_time
+                    order.transaction_id = trade_no or order.transaction_id
+                    order.save(update_fields=["status", "pay_method", "pay_time", "transaction_id", "update_time"])
+                    OrderLog.objects.create(
+                        order=order,
+                        operator=order.user,
+                        operator_name=order.user.username,
+                        action=OrderLog.ACTION_PAY_SUCCESS,
+                        message=f"支付宝支付成功，流水号：{trade_no}，金额：{total_amount}",
+                        ip_address=get_client_ip(request),
+                    )
+        except Order.DoesNotExist:
+            logger.warning("支付宝回调订单不存在: %s", out_trade_no)
+            return HttpResponse("success")
+
+        return HttpResponse("success")
+
+    @api_doc(tags=["订单 支付宝同步跳转"], request_body=None, response_body=None)
+    def get(self, request):
+        """处理支付宝同步跳转回调。"""
+        return self.post(request)

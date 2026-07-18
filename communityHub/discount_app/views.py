@@ -45,11 +45,11 @@ class CouponRetrieveViewSet(ViewSet):
     def update(self, request, pk):
         # 悲观锁
         coupon_template = get_object_or_404(
-            CouponTemplate.objects.select_for_update().prefetch_related("template_coupons"),
+            CouponTemplate.objects.select_for_update(of=('self',)).prefetch_related("template_coupons"),
             msg="优惠券模板不存在", pk=pk)
 
         # 检测是否有人已经领取：
-        if coupon_template.template_coupons.exists():
+        if len(coupon_template.template_coupons.all()) > 0:
             # 已领取状态下，只允许改名称/描述/时间，不能改金额/门槛
             forbidden_fields = ['type', 'min_purchase', 'discount', 'total_count']
             if any(field in request.data for field in forbidden_fields):

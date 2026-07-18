@@ -312,5 +312,16 @@ CELERY_IMPORTS = [
     'celery_tasks.clear_expire_coupon',
 ]
 
+# 支付宝沙盒配置
+ALIPAY_APP_ID = os.getenv("ALIPAY_APP_ID", "")
+ALIPAY_PRIVATE_KEY = os.getenv("ALIPAY_PRIVATE_KEY", "")
+ALIPAY_ALIPAY_PUBLIC_KEY = os.getenv("ALIPAY_ALIPAY_PUBLIC_KEY", "")
+ALIPAY_NOTIFY_URL = os.getenv("ALIPAY_NOTIFY_URL", "")
+ALIPAY_RETURN_URL = os.getenv("ALIPAY_RETURN_URL", "")
+ALIPAY_GATEWAY = os.getenv("ALIPAY_GATEWAY", "https://openapi-sandbox.dl.alipaydev.com/gateway.do")
+ALIPAY_SIGN_TYPE = os.getenv("ALIPAY_SIGN_TYPE", "RSA2")
+ALIPAY_CHARSET = os.getenv("ALIPAY_CHARSET", "utf-8")
+ALIPAY_TIMEOUT = int(os.getenv("ALIPAY_TIMEOUT", "15"))
+
 # 告诉 Celery 使用 django_celery_beat 作为调度器
 # CELERY_BEAT_SCHEDULER = 'django_celery_beat.schedulers:DatabaseScheduler'
