@@ -3,6 +3,7 @@ from decimal import Decimal
 
 from django.db import transaction
 from django.http import HttpResponse
+from django.utils import timezone
 from django_ratelimit.decorators import ratelimit
 from django.utils.decorators import method_decorator
 from rest_framework import status
@@ -48,10 +49,26 @@ class OrderRetrieveViewSet(ViewSet):
         goods = get_object_or_404(Goods.objects.select_related("user", "organization"), msg="商品不存在",
                                   id=serializer.validated_data.get("goods_id"))
 
+        user_coupon = None
         if user_coupon_id:
             user_coupon = get_object_or_404(UserCoupon.objects.select_related("coupon_template"),
                                             msg="用户优惠券不存在",
                                             id=user_coupon_id)
+
+            if user_coupon.user_id != user.id:
+                logger.warning("订单 优惠券不属于当前用户，无法使用")
+                return common_response(status=status.HTTP_400_BAD_REQUEST,
+                                       message="订单 优惠券不属于当前用户，无法使用")
+            if user_coupon.status != 0:
+                logger.warning("订单 优惠券已被使用或已过期")
+                return common_response(status=status.HTTP_400_BAD_REQUEST,
+                                       message="订单 优惠券已被使用或已过期")
+
+            now = timezone.now()
+            if user_coupon.valid_from and user_coupon.valid_from > now:
+                return common_response(status=status.HTTP_400_BAD_REQUEST, message="订单 优惠券尚未生效")
+            if user_coupon.valid_to and user_coupon.valid_to < now:
+                return common_response(status=status.HTTP_400_BAD_REQUEST, message="订单 优惠券已过期")
 
         if goods.organization_id != org.id:
             logger.warning("订单 商品不属于当前用户组织，无法创建订单")
@@ -102,9 +119,16 @@ class OrderRetrieveViewSet(ViewSet):
                     goods_name=goods.name,
                     goods_spec=serializer.validated_data.get("goods_spec") or {},
                     goods_image=str(goods.big_img or goods.small_img or ""),
+                    user_coupon=user_coupon,
                     user_remark=serializer.validated_data.get("user_remark"),
                     admin_remark=serializer.validated_data.get("admin_remark")
                 )
+
+                if user_coupon:
+                    user_coupon.status = 1
+                    user_coupon.used_time = timezone.now()
+                    user_coupon.order = order
+                    user_coupon.save(update_fields=["status", "used_time", "order", "update_time"])
 
                 OrderLog.objects.create(order=order, operator=user, operator_name=user.username,
                                         action=OrderLog.ACTION_CREATE_ORDER, message="创建订单成功",
@@ -116,6 +140,24 @@ class OrderRetrieveViewSet(ViewSet):
         except Exception as e:
             logger.error(f"订单 创建失败：{e}", exc_info=True)
             return common_response(status=status.HTTP_500_INTERNAL_SERVER_ERROR, message="订单 创建失败")
+
+    @api_doc(tags=["订单 订单列表"], response_body=OrderResponseSerializer)
+    def list(self, request):
+        """获取当前用户的订单列表（分页）"""
+
+        user = request.user
+        if not user:
+            return common_response(status=status.HTTP_400_BAD_REQUEST, message="订单 用户未登录")
+
+        queryset = Order.objects.select_related("user", "organization").filter(
+            user=user, is_deleted=False
+        ).order_by('-create_time')
+
+        paginator = CommonPageNumberPagination()
+        paginated_data = paginator.paginate_queryset(queryset, request)
+        serializer = OrderResponseSerializer(paginated_data, many=True)
+
+        return paginator.get_paginated_response(serializer.data)
 
     @api_doc(tags=["订单 订单修改"], request_body=OrderCommonSerializer, response_body=OrderResponseSerializer)
     @api_put

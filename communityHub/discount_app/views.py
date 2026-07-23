@@ -13,23 +13,25 @@ from organization_app.models import Organization
 from order_app.models import Order
 from goods_app.models import Goods
 from discount_app.models import CouponTemplate, UserCoupon, CouponReceiveLog
-from config.decorators.common import api_doc, api_post, api_put
+from config.decorators.common import api_doc, api_post, api_put,api_get
 from discount_app.serializers import CouponTemplateSerializer, CouponTemplateResponseSerializer, \
     CouponTemplateUpdateSerializer, UserCouponSerializer
 from config.help_tools import common_response, get_object_or_404, get_client_ip
-from config.authentication import IsAdminOrSuper
+from config.authentication import IsAdminOrSuper, IsCommonUser
 
 logger = logging.getLogger(__name__)
 
 
 class CouponRetrieveViewSet(ViewSet):
-    permission_classes = [IsAdminOrSuper]  # 必须管理或者超管登录修改
+    permission_classes = [IsCommonUser]  # 所有登录用户可查看，增改需管理员
 
     @api_doc(tags=["优惠券 优惠卷模板创建"], request_body=CouponTemplateSerializer,
              response_body=CouponTemplateResponseSerializer)
     @api_post
     @method_decorator(ratelimit(key='user', rate='5/m', method='POST', block=True))
     def create(self, request):
+        if not (request.user.is_staff or (request.user.user_type or 0) >= 2):
+            return common_response(status.HTTP_403_FORBIDDEN, message="无权限，仅管理员可创建")
         serializer = CouponTemplateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         instance = serializer.save()
@@ -37,12 +39,26 @@ class CouponRetrieveViewSet(ViewSet):
         return common_response(
             status.HTTP_201_CREATED, "创建成功", CouponTemplateResponseSerializer(instance).data)
 
+    @api_doc(tags=["优惠券 优惠卷模板列表"], response_body=CouponTemplateResponseSerializer)
+    @api_get
+    def list(self, request):
+        """获取所有激活的优惠券模板列表"""
+
+        queryset = CouponTemplate.objects.filter(is_active=True).order_by('-create_time')
+        serializer = CouponTemplateResponseSerializer(queryset, many=True)
+        return common_response(status.HTTP_200_OK, message="获取成功",
+                               data={"list": serializer.data, "total": queryset.count()})
+
     @api_doc(tags=["优惠券 优惠卷模板修改"], request_body=CouponTemplateUpdateSerializer,
              response_body=CouponTemplateResponseSerializer)
+
+
     @api_put
     @transaction.atomic
     @method_decorator(ratelimit(key='user', rate='5/m', method='PUT', block=True))
     def update(self, request, pk):
+        if not (request.user.is_staff or (request.user.user_type or 0) >= 2):
+            return common_response(status.HTTP_403_FORBIDDEN, message="无权限，仅管理员可修改")
         # 悲观锁
         coupon_template = get_object_or_404(
             CouponTemplate.objects.select_for_update(of=('self',)).prefetch_related("template_coupons"),
@@ -71,6 +87,7 @@ class CouponRetrieveViewSet(ViewSet):
 
 
 class UserCouponViewSet(ViewSet):
+    permission_classes = [IsCommonUser]
 
     @api_doc(tags=["优惠券 用户领取优惠券"], request_body=UserCouponSerializer,
              response_body=CouponTemplateResponseSerializer)
@@ -162,3 +179,37 @@ class UserCouponViewSet(ViewSet):
                 f"用户领取优惠券失败，优惠券模版id:{coupon_template.id}, 用户id:{request.user.id}, 错误信息:{e}")
             return common_response(
                 status.HTTP_400_BAD_REQUEST, message="领取优惠券失败")
+
+    @api_doc(tags=["优惠券 用户优惠券列表"], response_body=None)
+    @api_get
+    def list(self, request):
+        """获取当前用户可用优惠券"""
+
+        now = timezone.now()
+        coupons = UserCoupon.objects.select_related("coupon_template").filter(
+            user=request.user,
+            status=0,
+            valid_from__lte=now,
+            valid_to__gte=now,
+        ).order_by("-create_time")
+
+        data = []
+        for c in coupons:
+            data.append({
+                "id": c.id,
+                "coupon_template_id": c.coupon_template_id,
+                "name": c.coupon_template.name,
+                "type": c.coupon_template.type,
+                "discount_value": c.snapshot_value,
+                "min_purchase": c.snapshot_min_purchase,
+                "valid_from": c.valid_from.strftime("%Y-%m-%d %H:%M:%S") if c.valid_from else None,
+                "valid_to": c.valid_to.strftime("%Y-%m-%d %H:%M:%S") if c.valid_to else None,
+                "status": c.status,
+            })
+        return common_response(status.HTTP_200_OK, message="获取成功",
+                               data={"list": data, "total": len(data)})
+
+
+class UserQueryCouponViewSet:
+
+    pass

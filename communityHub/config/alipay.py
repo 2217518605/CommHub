@@ -1,6 +1,7 @@
 import base64
 import json
 import logging
+import os
 from collections import OrderedDict
 from dataclasses import dataclass
 from datetime import datetime
@@ -38,19 +39,33 @@ class AlipayClient:
         self.charset = settings.ALIPAY_CHARSET
         self.timeout = settings.ALIPAY_TIMEOUT
 
+    @staticmethod
+    def _resolve_key_content(value: str) -> str:
+        """如果 value 是文件路径，则读取文件内容；否则当作 PEM 字符串直接返回"""
+        if not value:
+            return value
+        # 判断是否为文件路径：包含 .pem/.key 后缀，或包含路径分隔符
+        if value.endswith(('.pem', '.key')) or '/' in value or '\\' in value:
+            if os.path.isfile(value):
+                with open(value, 'r', encoding='utf-8') as f:
+                    return f.read()
+        return value
+
     def _load_private_key(self):
         """ 加载支付宝应用私钥 """
 
-        if not self.private_key:
+        key_content = self._resolve_key_content(self.private_key)
+        if not key_content:
             raise ValueError("支付宝私钥未配置")
-        return serialization.load_pem_private_key(self.private_key.encode(self.charset), password=None)
+        return serialization.load_pem_private_key(key_content.encode(self.charset), password=None)
 
     def _load_public_key(self):
         """ 加载支付宝公钥 """
 
-        if not self.alipay_public_key:
+        key_content = self._resolve_key_content(self.alipay_public_key)
+        if not key_content:
             raise ValueError("支付宝公钥未配置")
-        return serialization.load_pem_public_key(self.alipay_public_key.encode(self.charset))
+        return serialization.load_pem_public_key(key_content.encode(self.charset))
 
     def _build_sign_content(self, params: Dict[str, Any]) -> str:
         """ 拼接待签名参数串 """

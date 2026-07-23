@@ -47,10 +47,6 @@ class GoodsCommonSerializer(serializers.ModelSerializer):
             logger.error("商品创建 商品价格必须大于0")
             raise serializers.ValidationError("商品价格必须大于0")
 
-        if data["sold_count"] < 0:
-            logger.error("商品创建 已售数量必须大于等于0")
-            raise serializers.ValidationError("已售数量必须大于等于0")
-
         allow_img_types = [".jpg", ".png", ".gif", ".jpeg"]
 
         print(type(data))
@@ -65,6 +61,14 @@ class GoodsCommonSerializer(serializers.ModelSerializer):
 
 class GoodsResponseSerializer(serializers.ModelSerializer):
     """ 商品通用返参序列化器  """
+    organization_name = serializers.SerializerMethodField()
+    user_name = serializers.SerializerMethodField()
+
+    def get_organization_name(self, obj):
+        return obj.organization.org_name if obj.organization_id else None
+
+    def get_user_name(self, obj):
+        return obj.user.username if obj.user_id else None
 
     class Meta:
         model = Goods

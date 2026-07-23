@@ -13,12 +13,13 @@ class UserRegisterSerializer(serializers.ModelSerializer):
 
     password_confirm = serializers.CharField(write_only=True, max_length=256)
     organization_id = serializers.IntegerField(required=False, allow_null=True, help_text="用户关联的组织ID")
+    admin_secret = serializers.CharField(write_only=True, required=False, allow_blank=True, max_length=64, help_text="管理员注册密钥")
 
     class Meta:
         model = User
         fields = [
             'account', 'password', 'password_confirm', "birth_date", "id_card", "balance",
-            'mobile', 'email', 'username', "organization_id", "is_staff", "user_type"
+            'mobile', 'email', 'username', "organization_id", "is_staff", "user_type", "admin_secret"
         ]
         extra_kwargs = {
             'password': {'write_only': True, 'min_length': 3, 'max_length': 20},
@@ -27,16 +28,24 @@ class UserRegisterSerializer(serializers.ModelSerializer):
         }
 
     def validate(self, data):
-        """ 验证密码 """
+        """ 验证密码和管理员密钥 """
 
         if data["password"] != data["password_confirm"]:
             raise serializers.ValidationError("两次输入的密码不一致")
+
+        user_type = data.get("user_type")
+        if user_type == "admin":
+            secret = data.get("admin_secret") or ""
+            if secret != "admin123456":
+                logger.info("用户 管理员创建失败，请填写正确的密钥！")
+                raise serializers.ValidationError("管理员密钥不正确")
         return data
 
     def create(self, validated_data):
 
         # 移除不需要存入数据库的字段
         validated_data.pop('password_confirm', None)
+        validated_data.pop('admin_secret', None)
 
         # username 为空
         if not validated_data.get('username'):
@@ -80,7 +89,17 @@ class UserUpdateSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = [
-            'username', 'mobile', 'email', 'avatar', 'birth_date', 'id_card', 'balance', "organization_id", "password"]
+            'username', 'mobile', 'email', 'avatar', 'birth_date', 'id_card', 'balance', "organization", "password"]
+
+    def validate_birth_date(self, value):
+        if value == '' or (isinstance(value, str) and not value.strip()):
+            return None
+        return value
+
+    def validate_id_card(self, value):
+        if value == '' or (isinstance(value, str) and not value.strip()):
+            return None
+        return value
 
 
 class UserDeleteSerializer(serializers.ModelSerializer):
@@ -93,12 +112,16 @@ class UserDeleteSerializer(serializers.ModelSerializer):
 
 class UserResponseSerializer(serializers.ModelSerializer):
     """ 用户返回序列化器 """
+    organization_name = serializers.SerializerMethodField()
+
+    def get_organization_name(self, obj):
+        return obj.organization.org_name if obj.organization_id else None
 
     class Meta:
         model = User
         fields = [
             'id', 'username', "account", "password", 'mobile', 'email', 'avatar', 'birth_date', 'id_card', 'balance',
-            "organization_id",
+            "organization_id", "organization_name",
             "is_active", "is_staff", "user_type", "last_login"
         ]
 

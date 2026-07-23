@@ -102,7 +102,7 @@ def common_response(status: int = status.HTTP_200_OK, message: str = "操作成�
         "status": status,
         "message": message,
         "data": data
-    })
+    }, status=status)
 
 
 def get_object_or_404(klass, *args, msg=None, **kwargs):

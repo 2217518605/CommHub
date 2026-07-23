@@ -22,13 +22,13 @@ from config.help_tools import get_client_ip, get_object_or_404
 logger = logging.getLogger(__name__)
 
 
-def _goods_search_cache_key(query_name, page_number, page_size):
+def _goods_search_cache_key(query_name, page_number, page_size, organization_id):
     """构造商品搜索缓存键"""
 
     version = cache.get(getattr(settings, "GOODS_HOT_CACHE_VERSION_KEY", "goods:hot:version"), 1)
     normalized_query = (query_name or "").strip().lower()
     prefix = getattr(settings, "GOODS_HOT_QUERY_CACHE_PREFIX", "goods:hot:query")
-    return f"{prefix}:{version}:{normalized_query}:p{page_number}:s{page_size}"
+    return f"{prefix}:{version}:org{organization_id}:{normalized_query}:p{page_number}:s{page_size}"
 
 
 def _page_size_from_request(request):
@@ -145,24 +145,33 @@ class GoodsRetrieveViewSet(ViewSet):
 
 
 class GoodsListViewSet(ViewSet):
-    permission_classes = [IsPublic]
+    permission_classes = [IsCommonUser]
     pagination_class = CommonPageNumberPagination
 
-    @api_doc(tags=["商品 通过关键词获取所有商品列表"], request_body=GoodsQueryByNameSerializer,
+    @api_doc(tags=["商品 通过关键词获取所属组织商品列表"], request_body=GoodsQueryByNameSerializer,
              response_body=GoodsResponseSerializer)
     @api_post
     def list_by_query_name(self, request):
 
+        user = request.user
+        org = getattr(user, "organization", None)
+        if not org:
+            logger.warning(f'商品 用户 {user.username} 未加入组织，无法查看商品列表')
+            return common_response(status=status.HTTP_403_FORBIDDEN, message="请先加入组织，才能查看商品列表")
+
         query_name = request.data.get("query_name")
         page_number = request.data.get("page", 1)
         page_size = _page_size_from_request(request)
-        cache_key = _goods_search_cache_key(query_name, page_number, page_size)
+        cache_key = _goods_search_cache_key(query_name, page_number, page_size, org.id)
         cached_response = cache.get(cache_key)
         if cached_response is not None:
-            logger.info(f'商品 搜索命中缓存：query_name={query_name}, page={page_number}')
+            logger.info(f'商品 搜索命中缓存：query_name={query_name}, page={page_number}, org={org.id}')
+            if 'status' in cached_response:
+                cached_response = cached_response.get('data', cached_response)
             return common_response(status=status.HTTP_200_OK, message="获取商品列表成功", data=cached_response)
 
-        goods_queryset = Goods.objects.select_related("user", "organization").filter(status=Goods.STATUS_NORMAL)
+        goods_queryset = Goods.objects.select_related("user", "organization").filter(
+            status=Goods.STATUS_NORMAL, organization=org)
         if query_name:
             goods_queryset = goods_queryset.filter(name__icontains=query_name)
 
@@ -173,7 +182,7 @@ class GoodsListViewSet(ViewSet):
         pagination_data = paginator.paginate_queryset(goods_list, request)
         serializer = GoodsResponseSerializer(pagination_data, many=True)
         response_body = paginator.get_paginated_response(serializer.data)
-        cache.set(cache_key, response_body.data, timeout=getattr(settings, "GOODS_HOT_CACHE_TIMEOUT", 300))
+        cache.set(cache_key, response_body.data.get('data'), timeout=getattr(settings, "GOODS_HOT_CACHE_TIMEOUT", 300))
         return response_body
 
 
