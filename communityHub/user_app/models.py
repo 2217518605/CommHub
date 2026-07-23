@@ -14,13 +14,15 @@ class User(BaseModel):
     username = models.CharField(max_length=20, verbose_name='用户名', help_text="用户名", blank=True,
                                 null=True, default="默认用户")
     account = models.CharField(max_length=20, unique=True, verbose_name='账号', help_text="账号", blank=False,
-                               null=False)
+                               null=False, error_messages={'unique': '该账号已被注册'})
     password = models.CharField(max_length=256, verbose_name='密码', help_text="密码", blank=False, null=False)
     mobile = models.CharField(max_length=11, unique=True, verbose_name='手机号', help_text="手机号", blank=True,
                               null=True, validators=[RegexValidator(regex=r"^1[3-9]\d{9}$",
                                                                     message='请输入正确的手机号（11位）',
-                                                                    code='invalid_mobile')])
-    email = models.EmailField(max_length=50, unique=True, verbose_name='邮箱', help_text="邮箱", blank=True, null=True)
+                                                                    code='invalid_mobile')],
+                              error_messages={'unique': '该手机号已被注册'})
+    email = models.EmailField(max_length=50, unique=True, verbose_name='邮箱', help_text="邮箱", blank=True, null=True,
+                              error_messages={'unique': '该邮箱已被注册'})
     avatar = models.ImageField(upload_to='user_avatars/',
                                default='user_avatars/default_user_avatar.png',
                                verbose_name='用户头像', help_text="用户头像", blank=True, null=True)
