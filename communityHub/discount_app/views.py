@@ -183,15 +183,19 @@ class UserCouponViewSet(ViewSet):
     @api_doc(tags=["优惠券 用户优惠券列表"], response_body=None)
     @api_get
     def list(self, request):
-        """获取当前用户可用优惠券"""
+        """获取当前用户优惠券（默认只返回可用，传 show_all=1 返回全部）"""
 
         now = timezone.now()
         coupons = UserCoupon.objects.select_related("coupon_template").filter(
             user=request.user,
-            status=0,
-            valid_from__lte=now,
-            valid_to__gte=now,
-        ).order_by("-create_time")
+        )
+        if not request.query_params.get("show_all"):
+            coupons = coupons.filter(
+                status=0,
+                valid_from__lte=now,
+                valid_to__gte=now,
+            )
+        coupons = coupons.order_by("-create_time")
 
         data = []
         for c in coupons:
@@ -205,6 +209,7 @@ class UserCouponViewSet(ViewSet):
                 "valid_from": c.valid_from.strftime("%Y-%m-%d %H:%M:%S") if c.valid_from else None,
                 "valid_to": c.valid_to.strftime("%Y-%m-%d %H:%M:%S") if c.valid_to else None,
                 "status": c.status,
+                "used_time": c.used_time.strftime("%Y-%m-%d %H:%M:%S") if c.used_time else None,
             })
         return common_response(status.HTTP_200_OK, message="获取成功",
                                data={"list": data, "total": len(data)})

@@ -45,7 +45,7 @@ def _invalidate_goods_hot_cache():
     try:
         cache.incr(version_key)
     except ValueError:
-        cache.set(version_key, 1)
+        cache.set(version_key, 2)
 
 
 class GoodsRetrieveViewSet(ViewSet):
@@ -64,7 +64,7 @@ class GoodsRetrieveViewSet(ViewSet):
     @api_get
     def retrieve(self, request, pk):
 
-        goods = get_object_or_404(Goods.objects.select_related('user', 'organization'), msg="要获取的商品不存在", pk=pk)
+        goods = get_object_or_404(Goods.objects.select_related('user', 'organization').prefetch_related('extra_images'), msg="要获取的商品不存在", pk=pk)
         serializer = GoodsResponseSerializer(goods)
         logger.info(f'商品 获取成功：商品信息：{serializer.data}')
         return common_response(status=status.HTTP_200_OK, message="商品详情获取成功", data=serializer.data)
@@ -100,7 +100,7 @@ class GoodsRetrieveViewSet(ViewSet):
     @api_put
     def update(self, request, pk):
 
-        goods = get_object_or_404(Goods.objects.select_related('user', 'organization'), msg="要更新的商品不存在", pk=pk)
+        goods = get_object_or_404(Goods.objects.select_related('user', 'organization').prefetch_related('extra_images'), msg="要更新的商品不存在", pk=pk)
 
         if goods.user != request.user:
             logger.warning(f'用户 {request.user.username} 没有权限修改商品 {goods.name}')
@@ -128,7 +128,7 @@ class GoodsRetrieveViewSet(ViewSet):
     @transaction.atomic
     def destroy(self, request, pk):
 
-        goods = get_object_or_404(Goods.objects.select_related('user', 'organization'), msg="要删除的商品不存在", pk=pk)
+        goods = get_object_or_404(Goods.objects.select_related('user', 'organization').prefetch_related('extra_images'), msg="要删除的商品不存在", pk=pk)
 
         if goods.user != request.user:
             logger.warning(f'用户 {request.user.username} 没有权限删除商品 {goods.name}')
@@ -170,7 +170,7 @@ class GoodsListViewSet(ViewSet):
                 cached_response = cached_response.get('data', cached_response)
             return common_response(status=status.HTTP_200_OK, message="获取商品列表成功", data=cached_response)
 
-        goods_queryset = Goods.objects.select_related("user", "organization").filter(
+        goods_queryset = Goods.objects.select_related("user", "organization").prefetch_related("extra_images").filter(
             status=Goods.STATUS_NORMAL, organization=org)
         if query_name:
             goods_queryset = goods_queryset.filter(name__icontains=query_name)
@@ -306,11 +306,7 @@ class GoodsCommentsListViewSet(ViewSet):
         paginator = self.pagination_class()
         pagination_data = paginator.paginate_queryset(comments_list, request)
         serializer = GoodsCommentsResponseSerializer(pagination_data, many=True)
-        return paginator.get_paginated_response({
-            "status": status.HTTP_200_OK,
-            "message": "获取商品评论成功",
-            "data": serializer.data
-        })
+        return paginator.get_paginated_response(serializer.data)
 
 
 class GoodsCommentsLikeNumViewSet(ViewSet):

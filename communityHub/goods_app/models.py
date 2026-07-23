@@ -1,8 +1,38 @@
+import os
+import re
+
 from django.db import models
 
 from models.base import BaseModel
 from user_app.models import User
 from organization_app.models import Organization
+
+
+def _sanitize_dirname(name: str) -> str:
+    """清理名称中的非法字符，用于目录名"""
+    return re.sub(r'[<>:"/\\|?*]', '_', name) if name else 'unknown'
+
+
+def goods_image_upload_path(instance, filename):
+    """
+    动态上传路径：goods_photos/{组织名}/{用户名}/{商品名}/{filename}
+    支持 Goods 和 GoodsImage 两种模型
+    """
+    from goods_app.models import GoodsImage
+    if isinstance(instance, GoodsImage):
+        goods = instance.goods
+    else:
+        goods = instance
+
+    org_name = _sanitize_dirname(goods.organization.org_name) if goods.organization_id else 'unknown_org'
+    user_name = _sanitize_dirname(goods.user.username) if goods.user_id else 'unknown_user'
+    goods_name = _sanitize_dirname(goods.name) if goods.name else 'unknown_goods'
+
+    # 保留原始扩展名
+    ext = os.path.splitext(filename)[1] or '.jpg'
+    import uuid
+    unique_name = f"{uuid.uuid4().hex[:8]}{ext}"
+    return f'goods_photos/{org_name}/{user_name}/{goods_name}/{unique_name}'
 
 
 class Goods(BaseModel):
@@ -28,10 +58,10 @@ class Goods(BaseModel):
                                 blank=False, null=False)
     number = models.IntegerField(verbose_name="商品数量", help_text="商品数量", blank=False, null=False, default=0)
     desc = models.TextField(verbose_name="商品描述", help_text="商品描述", blank=True, null=True)
-    big_img = models.ImageField(verbose_name="商品图片", help_text="商品图片", blank=True, null=True,
-                                upload_to='goods_photos/', default='goods_photos/default_goods_photos.png')
+    big_img = models.ImageField(verbose_name="商品主图", help_text="商品主图（第一张）", blank=True, null=True,
+                                upload_to=goods_image_upload_path, default='goods_photos/default_goods_photos.png')
     small_img = models.ImageField(verbose_name="商品缩略图", help_text="商品缩略图", blank=True, null=True,
-                                  upload_to='goods_photos/', default='goods_photos/default_goods_photos.png')
+                                  upload_to=goods_image_upload_path, default='goods_photos/default_goods_photos.png')
     status = models.CharField(verbose_name="商品状态", help_text="商品状态", max_length=10,
                               choices=STATUS_CHOICES, default="待审核")
     sold_count = models.IntegerField(verbose_name="已售数量", help_text="已售数量", default=0)
@@ -81,6 +111,24 @@ class GoodsLog(BaseModel):
 
     def __str__(self):
         return f"{self.get_operation_display()} | {self.goods_name} | {self.user}"
+
+
+class GoodsImage(BaseModel):
+    """ 商品多图：除主图外的额外图片 """
+
+    goods = models.ForeignKey(Goods, on_delete=models.CASCADE, verbose_name="所属商品", related_name="extra_images")
+    image = models.ImageField(verbose_name="商品图片", upload_to=goods_image_upload_path,
+                              blank=False, null=False)
+    sort_order = models.IntegerField(verbose_name="排序", default=0)
+
+    class Meta:
+        db_table = "t_goods_image"
+        verbose_name = "商品图片"
+        verbose_name_plural = verbose_name
+        ordering = ["sort_order", "id"]
+
+    def __str__(self):
+        return f"{self.goods.name} - 图片{self.sort_order}"
 
 
 class GoodsComments(BaseModel):

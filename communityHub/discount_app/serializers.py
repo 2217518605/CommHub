@@ -93,6 +93,10 @@ class UserCouponSerializer(serializers.ModelSerializer):
 class UserCouponResponseSerializer(serializers.ModelSerializer):
     """ 用户优惠券返参序列化器 """
 
+    template_name = serializers.CharField(source='coupon_template.name', read_only=True)
+    template_type = serializers.IntegerField(source='coupon_template.type', read_only=True)
+    template_discount = serializers.FloatField(source='coupon_template.discount', read_only=True)
+
     class Meta:
         model = UserCoupon
         fields = "__all__"

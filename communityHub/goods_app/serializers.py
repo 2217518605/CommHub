@@ -1,23 +1,50 @@
 import logging
+import os
 
 from rest_framework import serializers
 
-from goods_app.models import Goods, GoodsComments
+from goods_app.models import Goods, GoodsComments, GoodsImage
 from organization_app.models import Organization
 from user_app.models import User
 
 logger = logging.getLogger(__name__)
 
 
+class GoodsImageSerializer(serializers.ModelSerializer):
+    """ 商品图片返参序列化器 """
+
+    class Meta:
+        model = GoodsImage
+        fields = ["id", "image", "sort_order"]
+
+
+class MultiImageField(serializers.ListField):
+    """支持同时上传多张图片的字段，修复 QueryDict.get() 只返回最后一张的问题"""
+
+    def get_value(self, dictionary):
+        if hasattr(dictionary, 'getlist'):
+            return dictionary.getlist(self.field_name)
+        return super().get_value(dictionary)
+
+
 class GoodsCommonSerializer(serializers.ModelSerializer):
     """ 商品的通用入参序列化器(创建、更新) """
+
+    images = MultiImageField(
+        child=serializers.ImageField(),
+        required=False,
+        write_only=True,
+        help_text="多张图片列表，第一张为主图，第二张为缩略图，其余为附加图片"
+    )
 
     class Meta:
         model = Goods
         exclude = ("user", "organization")
         extra_kwargs = {
             "user": {"write_only": True},
-            "organization": {"write_only": True}
+            "organization": {"write_only": True},
+            "big_img": {"required": False},
+            "small_img": {"required": False},
         }
 
     def validate_organization_id(self, value):
@@ -36,33 +63,65 @@ class GoodsCommonSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("用户不存在")
         return value
 
+    def _validate_image_format(self, image):
+        ext = os.path.splitext(image.name)[1].lower()
+        if ext not in [".jpg", ".jpeg", ".png", ".gif"]:
+            raise serializers.ValidationError(f"图片格式不支持：{ext}，仅支持 jpg/png/gif")
+        return image
+
+    def _process_images(self, goods, images):
+        """处理上传的多张图片：第一张→big_img，第二张→small_img，其余→GoodsImage"""
+        if not images:
+            return
+
+        for idx, img in enumerate(images):
+            self._validate_image_format(img)
+            if idx == 0:
+                goods.big_img = img
+            elif idx == 1:
+                goods.small_img = img
+            else:
+                GoodsImage.objects.create(goods=goods, image=img, sort_order=idx)
+
     def validate(self, data):
         """ 校验其他数据的合理性 """
-
-        if data["number"] <= 0:
+        if data.get("number", 1) <= 0:
             logger.error("商品创建 商品数量必须大于0")
             raise serializers.ValidationError("商品数量必须大于0")
 
-        if data["price"] <= 0:
+        price = data.get("price")
+        if price is not None and price <= 0:
             logger.error("商品创建 商品价格必须大于0")
             raise serializers.ValidationError("商品价格必须大于0")
 
-        allow_img_types = [".jpg", ".png", ".gif", ".jpeg"]
-
-        print(type(data))
-
-        if data.get("big_img") and data.get("small_img"):
-            if data["big_img"].split(".")[-1] or data["small_img"].split(".")[-1] not in allow_img_types:
-                logger.error("商品创建 图片格式错误")
-                raise serializers.ValidationError("图片格式错误")
+        images = data.get("images", [])
+        for img in images:
+            self._validate_image_format(img)
 
         return data
+
+    def create(self, validated_data):
+        images = validated_data.pop("images", [])
+        instance = super().create(validated_data)
+        if images:
+            self._process_images(instance, images)
+            instance.save(update_fields=["big_img", "small_img"])
+        return instance
+
+    def update(self, instance, validated_data):
+        images = validated_data.pop("images", None)
+        instance = super().update(instance, validated_data)
+        if images is not None and len(images) > 0:
+            self._process_images(instance, images)
+            instance.save(update_fields=["big_img", "small_img"])
+        return instance
 
 
 class GoodsResponseSerializer(serializers.ModelSerializer):
     """ 商品通用返参序列化器  """
     organization_name = serializers.SerializerMethodField()
     user_name = serializers.SerializerMethodField()
+    extra_images = GoodsImageSerializer(many=True, read_only=True)
 
     def get_organization_name(self, obj):
         return obj.organization.org_name if obj.organization_id else None
