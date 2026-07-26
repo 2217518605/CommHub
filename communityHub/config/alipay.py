@@ -2,15 +2,24 @@ import base64
 import json
 import logging
 import os
-from collections import OrderedDict
+import time
+import traceback
 from dataclasses import dataclass
-from datetime import datetime
 from decimal import Decimal
 from typing import Any, Dict
-from urllib.parse import quote_plus, urlencode
 
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding
+from alipay.aop.api.AlipayClientConfig import AlipayClientConfig
+from alipay.aop.api.DefaultAlipayClient import DefaultAlipayClient
+from alipay.aop.api.domain.AlipayTradeCreateModel import AlipayTradeCreateModel
+from alipay.aop.api.domain.AlipayTradePrecreateModel import AlipayTradePrecreateModel
+from alipay.aop.api.domain.AlipayTradePagePayModel import AlipayTradePagePayModel
+from alipay.aop.api.request.AlipayTradeCreateRequest import AlipayTradeCreateRequest
+from alipay.aop.api.request.AlipayTradePrecreateRequest import AlipayTradePrecreateRequest
+from alipay.aop.api.request.AlipayTradePagePayRequest import AlipayTradePagePayRequest
+from alipay.aop.api.request.AlipayTradeQueryRequest import AlipayTradeQueryRequest
+from alipay.aop.api.domain.AlipayTradeQueryModel import AlipayTradeQueryModel
 
 from django.conf import settings
 
@@ -25,129 +34,186 @@ class AlipayPaymentResult:
     total_amount: str
 
 
+def _read_key(path: str) -> str:
+    if os.path.isfile(path):
+        with open(path, 'r', encoding='utf-8') as f:
+            return f.read()
+    return path
+
+
 class AlipayClient:
-    """ 支付宝沙盒支付客户端，负责生成支付链接与验签 """
+    """ 支付宝沙盒支付客户端 """
 
     def __init__(self):
-        """ 初始化支付宝客户端配置 """
+        alipay_client_config = AlipayClientConfig()
+        alipay_client_config.server_url = settings.ALIPAY_GATEWAY
+        alipay_client_config.app_id = settings.ALIPAY_APP_ID
+        alipay_client_config.app_private_key = _read_key(settings.ALIPAY_PRIVATE_KEY)
+        alipay_client_config.alipay_public_key = _read_key(settings.ALIPAY_ALIPAY_PUBLIC_KEY)
+        self.sdk_client = DefaultAlipayClient(alipay_client_config, logger)
 
-        self.app_id = settings.ALIPAY_APP_ID
-        self.private_key = settings.ALIPAY_PRIVATE_KEY
-        self.alipay_public_key = settings.ALIPAY_ALIPAY_PUBLIC_KEY
-        self.gateway = settings.ALIPAY_GATEWAY
-        self.sign_type = settings.ALIPAY_SIGN_TYPE
-        self.charset = settings.ALIPAY_CHARSET
-        self.timeout = settings.ALIPAY_TIMEOUT
-
-    @staticmethod
-    def _resolve_key_content(value: str) -> str:
-        """如果 value 是文件路径，则读取文件内容；否则当作 PEM 字符串直接返回"""
-        if not value:
-            return value
-        # 判断是否为文件路径：包含 .pem/.key 后缀，或包含路径分隔符
-        if value.endswith(('.pem', '.key')) or '/' in value or '\\' in value:
-            if os.path.isfile(value):
-                with open(value, 'r', encoding='utf-8') as f:
-                    return f.read()
-        return value
-
-    def _load_private_key(self):
-        """ 加载支付宝应用私钥 """
-
-        key_content = self._resolve_key_content(self.private_key)
-        if not key_content:
-            raise ValueError("支付宝私钥未配置")
-        return serialization.load_pem_private_key(key_content.encode(self.charset), password=None)
-
-    def _load_public_key(self):
-        """ 加载支付宝公钥 """
-
-        key_content = self._resolve_key_content(self.alipay_public_key)
-        if not key_content:
-            raise ValueError("支付宝公钥未配置")
-        return serialization.load_pem_public_key(key_content.encode(self.charset))
-
-    def _build_sign_content(self, params: Dict[str, Any]) -> str:
-        """ 拼接待签名参数串 """
-
-        items = []
-        for key in sorted(params.keys()):
-            value = params[key]
-            if value in (None, ""):
-                continue
-            items.append(f"{key}={value}")
-        return "&".join(items)
-
-    def _sign(self, params: Dict[str, Any]) -> str:
-        """ 对请求参数进行 RSA2 签名 """
-
-        sign_content = self._build_sign_content(params)
-        private_key = self._load_private_key()
-        signature = private_key.sign(
-            sign_content.encode(self.charset),
-            padding.PKCS1v15(),
-            hashes.SHA256(),
+    def build_payment_url(self, *, order_number: str, total_amount: Decimal, subject: str, body: str = "") -> AlipayPaymentResult:
+        return self.build_qr_payment_url(
+            order_number=order_number, total_amount=total_amount,
+            subject=subject, body=body
         )
-        return base64.b64encode(signature).decode(self.charset)
 
-    def verify(self, params: Dict[str, Any], signature: str) -> bool:
-        """ 验签支付宝返回参数 """
+    def build_qr_payment_url(self, *, order_number: str, total_amount: Decimal, subject: str, body: str = "") -> AlipayPaymentResult:
+        """使用 Alipay SDK 生成当面付二维码
 
+        先调用 alipay.trade.create 在支付宝系统创建交易，
+        再调用 alipay.trade.precreate 生成二维码。
+        这样沙箱APP扫码时才能找到交易。
+        """
+
+        # 第一步：创建交易（让订单存在于支付宝系统中）
+        create_model = AlipayTradeCreateModel()
+        create_model.out_trade_no = order_number
+        create_model.total_amount = str(total_amount)
+        create_model.subject = subject
+        create_model.buyer_id = ""  # 不指定买家，让扫码者支付
+
+        create_request = AlipayTradeCreateRequest(biz_model=create_model)
+        create_request.notify_url = settings.ALIPAY_NOTIFY_URL or ""
+
+        for attempt in range(2):
+            try:
+                response = self.sdk_client.execute(create_request)
+                if isinstance(response, str):
+                    response = json.loads(response)
+                if response.get("code") == "10000":
+                    logger.info(f"支付宝交易创建成功: {order_number}")
+                    break
+                if response.get("sub_code") == "ACQ.TRADE_HAS_EXIST":
+                    logger.info(f"支付宝交易已存在: {order_number}")
+                    break
+                logger.warning(f"创建交易返回: {response}")
+                break  # 非重试类错误，直接跳出
+            except Exception as exc:
+                msg = str(exc)
+                if "504" in msg or "timed out" in msg.lower():
+                    logger.warning(f"创建交易 504/超时，第{attempt+1}次重试: {order_number}")
+                    time.sleep(1)
+                    continue
+                raise
+
+        # 第二步：生成当面付二维码
+        precreate_model = AlipayTradePrecreateModel()
+        precreate_model.out_trade_no = order_number
+        precreate_model.total_amount = str(total_amount)
+        precreate_model.subject = subject
+
+        precreate_request = AlipayTradePrecreateRequest(biz_model=precreate_model)
+        precreate_request.notify_url = settings.ALIPAY_NOTIFY_URL or ""
+
+        last_error = None
+        for attempt in range(2):
+            try:
+                response = self.sdk_client.execute(precreate_request)
+                if isinstance(response, str):
+                    response = json.loads(response)
+
+                qr_code = response.get("qr_code", "")
+                if qr_code:
+                    logger.info(f"支付宝预下单成功: {order_number}")
+                    return AlipayPaymentResult(
+                        order_number=order_number,
+                        pay_url=qr_code,
+                        out_trade_no=order_number,
+                        total_amount=str(total_amount),
+                    )
+
+                if response.get("code") != "10000":
+                    raise RuntimeError(f"预下单失败: {response}")
+
+            except Exception as exc:
+                last_error = exc
+                msg = str(exc)
+                if "504" in msg or "timed out" in msg.lower():
+                    logger.warning(f"支付宝预下单 504/超时，第{attempt+1}次重试: {order_number}")
+                    time.sleep(1)
+                    continue
+                raise
+
+        logger.error(f"生成支付宝二维码失败(重试2次): {order_number}")
+        logger.error(traceback.format_exc())
+        raise last_error
+
+    def build_page_payment_html(self, *, order_number: str, total_amount: Decimal, subject: str, body: str = "") -> str:
+        """使用 alipay.trade.page.pay 生成 PC 网页支付 HTML，直接在浏览器打开即可支付 """
+
+        model = AlipayTradePagePayModel()
+        model.out_trade_no = order_number
+        model.total_amount = str(total_amount)
+        model.subject = subject
+        model.body = body or subject
+        model.product_code = "FAST_INSTANT_TRADE_PAY"
+
+        request_obj = AlipayTradePagePayRequest(biz_model=model)
+        request_obj.notify_url = settings.ALIPAY_NOTIFY_URL or ""
+        request_obj.return_url = settings.ALIPAY_RETURN_URL or ""
+
+        last_error = None
+        for attempt in range(3):
+            try:
+                html = self.sdk_client.page_execute(request_obj)
+                logger.info(f"支付宝网页支付生成成功: {order_number}")
+                return html
+            except Exception as exc:
+                last_error = exc
+                msg = str(exc)
+                if "504" in msg or "timed out" in msg.lower():
+                    logger.warning(f"支付宝网页支付 504/超时，第{attempt+1}次重试: {order_number}")
+                    time.sleep(2)
+                    continue
+                raise
+
+        logger.error(f"生成支付宝网页支付失败(重试3次): {order_number}")
+        raise last_error
+
+    def query_payment(self, order_number: str) -> dict:
+        """查询支付宝订单支付状态 """
+
+        model = AlipayTradeQueryModel()
+        model.out_trade_no = order_number
+
+        request_obj = AlipayTradeQueryRequest(biz_model=model)
+
+        for attempt in range(3):
+            try:
+                response = self.sdk_client.execute(request_obj)
+                if isinstance(response, str):
+                    response = json.loads(response)
+                logger.info(f"查询订单状态成功: {order_number} -> {response.get('trade_status', '?')}")
+                return response
+            except Exception as exc:
+                msg = str(exc)
+                if "504" in msg or "timed out" in msg.lower():
+                    logger.warning(f"查询订单 504/超时，第{attempt+1}次重试: {order_number}")
+                    time.sleep(2)
+                    continue
+                raise
+
+        raise RuntimeError(f"查询订单状态失败(重试3次): {order_number}")
+
+    def verify_notify(self, request_data: Dict[str, Any]) -> bool:
+        signature = request_data.get("sign")
+        if not signature:
+            return False
         try:
-            content = self._build_sign_content(params)
-            public_key = self._load_public_key()
+            sign_content = "&".join(
+                f"{k}={v}" for k in sorted(request_data.keys())
+                if k not in ("sign", "sign_type") and v not in (None, "")
+            )
+            key_content = _read_key(settings.ALIPAY_ALIPAY_PUBLIC_KEY)
+            public_key = serialization.load_pem_public_key(key_content.encode("utf-8"))
             public_key.verify(
                 base64.b64decode(signature),
-                content.encode(self.charset),
+                sign_content.encode("utf-8"),
                 padding.PKCS1v15(),
                 hashes.SHA256(),
             )
             return True
         except Exception as exc:
-            logger.warning("支付宝验签失败: %s", exc, exc_info=True)
+            logger.warning("支付宝验签失败: %s", exc)
             return False
-
-    def build_payment_url(self, *, order_number: str, total_amount: Decimal, subject: str, body: str = "") -> AlipayPaymentResult:
-        """ 生成支付宝网页支付链接 """
-
-        if not self.app_id:
-            raise ValueError("支付宝APP_ID未配置")
-        biz_content = {
-            "out_trade_no": order_number,
-            "total_amount": f"{Decimal(total_amount):.2f}",
-            "subject": subject,
-            "product_code": "FAST_INSTANT_TRADE_PAY",
-            "body": body,
-        }
-        params = OrderedDict(
-            [
-                ("app_id", self.app_id),
-                ("method", "alipay.trade.page.pay"),
-                ("format", "JSON"),
-                ("charset", self.charset),
-                ("sign_type", self.sign_type),
-                ("timestamp", datetime.now().strftime("%Y-%m-%d %H:%M:%S")),
-                ("version", "1.0"),
-                ("notify_url", settings.ALIPAY_NOTIFY_URL),
-                ("return_url", settings.ALIPAY_RETURN_URL),
-                ("biz_content", json.dumps(biz_content, ensure_ascii=False, separators=(",", ":"))),
-            ]
-        )
-        sign = self._sign(params)
-        params["sign"] = sign
-        query = urlencode(params, quote_via=quote_plus)
-        return AlipayPaymentResult(
-            order_number=order_number,
-            pay_url=f"{self.gateway}?{query}",
-            out_trade_no=order_number,
-            total_amount=f"{Decimal(total_amount):.2f}",
-        )
-
-    def verify_notify(self, request_data: Dict[str, Any]) -> bool:
-        """ 验签支付宝异步通知请求 """
-
-        signature = request_data.get("sign")
-        if not signature:
-            return False
-        params = {k: v for k, v in request_data.items() if k != "sign"}
-        return self.verify(params, signature)

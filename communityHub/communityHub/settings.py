@@ -313,12 +313,12 @@ CELERY_IMPORTS = [
 ]
 
 # 支付宝沙盒配置
-ALIPAY_APP_ID = os.getenv("ALIPAY_APP_ID", "2021006175655305")
+ALIPAY_APP_ID = os.getenv("ALIPAY_APP_ID", "2021000148624482")
 ALIPAY_PRIVATE_KEY = os.getenv("ALIPAY_PRIVATE_KEY", str(BASE_DIR / "config" / "utils" / "private_key.pem"))
 ALIPAY_ALIPAY_PUBLIC_KEY = os.getenv("ALIPAY_ALIPAY_PUBLIC_KEY", str(BASE_DIR / "config" / "utils" / "public_key.pem"))
 ALIPAY_NOTIFY_URL = os.getenv("ALIPAY_NOTIFY_URL", "")
 ALIPAY_RETURN_URL = os.getenv("ALIPAY_RETURN_URL", "")
-ALIPAY_GATEWAY = os.getenv("ALIPAY_GATEWAY", "https://openapi-sandbox.dl.alipaydev.com/gateway.do")
+ALIPAY_GATEWAY = os.getenv("ALIPAY_GATEWAY", "http://openapi-sandbox.dl.alipaydev.com/gateway.do")
 ALIPAY_SIGN_TYPE = os.getenv("ALIPAY_SIGN_TYPE", "RSA2")
 ALIPAY_CHARSET = os.getenv("ALIPAY_CHARSET", "utf-8")
 ALIPAY_TIMEOUT = int(os.getenv("ALIPAY_TIMEOUT", "15"))

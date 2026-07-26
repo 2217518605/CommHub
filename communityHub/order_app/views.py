@@ -252,7 +252,7 @@ class OrderPaymentViewSet(ViewSet):
 
         client = AlipayClient()
         try:
-            payment = client.build_payment_url(
+            payment = client.build_qr_payment_url(
                 order_number=order.order_number,
                 total_amount=order.pay_price,
                 subject=order.goods_name,
@@ -267,6 +267,90 @@ class OrderPaymentViewSet(ViewSet):
             "pay_url": payment.pay_url,
             "out_trade_no": payment.out_trade_no,
             "total_amount": payment.total_amount,
+        })
+
+    @api_doc(tags=["订单 生成支付宝网页支付"], request_body=None, response_body=None)
+    @api_post
+    def page_pay(self, request):
+        """生成支付宝网页支付 HTML，前端直接在新窗口打开即可支付"""
+        order_number = request.data.get("order_number")
+        order = get_object_or_404(Order.objects.select_related("user", "organization", "goods"), msg="订单不存在",
+                                  order_number=order_number)
+
+        if order.user_id != request.user.id:
+            return common_response(status=status.HTTP_403_FORBIDDEN, message="无权操作该订单")
+        if order.status != Order.STATUS_WAIT_PAY:
+            return common_response(status=status.HTTP_400_BAD_REQUEST, message="订单当前状态不允许支付")
+        if order.pay_method != Order.PAY_METHOD_ALIPAY:
+            return common_response(status=status.HTTP_400_BAD_REQUEST, message="当前订单不是支付宝支付方式")
+
+        client = AlipayClient()
+        try:
+            html = client.build_page_payment_html(
+                order_number=order.order_number,
+                total_amount=order.pay_price,
+                subject=order.goods_name,
+                body=f"订单支付-{order.order_number}",
+            )
+        except Exception as exc:
+            logger.error("生成支付宝网页支付失败: %s", exc, exc_info=True)
+            return common_response(status=status.HTTP_500_INTERNAL_SERVER_ERROR, message="生成支付宝网页支付失败")
+
+        return HttpResponse(html)
+
+    @api_doc(tags=["订单 查询支付状态"], request_body=None, response_body=None)
+    @api_post
+    @transaction.atomic
+    def check_pay(self, request):
+        """主动查询支付宝支付状态并更新订单"""
+        order_number = request.data.get("order_number")
+        order = get_object_or_404(Order.objects.select_for_update().select_related("user"), msg="订单不存在",
+                                  order_number=order_number)
+
+        if order.user_id != request.user.id:
+            return common_response(status=status.HTTP_403_FORBIDDEN, message="无权操作该订单")
+
+        if order.status != Order.STATUS_WAIT_PAY:
+            return common_response(status=status.HTTP_200_OK, message="订单已处理", data={
+                "order_number": order.order_number,
+                "status": order.status,
+                "is_paid": order.status != Order.STATUS_WAIT_PAY,
+            })
+
+        client = AlipayClient()
+        try:
+            result = client.query_payment(order.order_number)
+        except Exception as exc:
+            logger.error("查询支付状态失败: %s", exc, exc_info=True)
+            return common_response(status=status.HTTP_500_INTERNAL_SERVER_ERROR, message="查询支付状态失败")
+
+        trade_status = result.get("trade_status", "")
+        if trade_status in ("TRADE_SUCCESS", "TRADE_FINISHED"):
+            trade_no = result.get("trade_no", "")
+            order.status = Order.STATUS_WAIT_DELIVER
+            order.pay_method = Order.PAY_METHOD_ALIPAY
+            order.pay_time = order.pay_time or order.create_time
+            order.transaction_id = trade_no or order.transaction_id
+            order.save(update_fields=["status", "pay_method", "pay_time", "transaction_id", "update_time"])
+
+            OrderLog.objects.create(
+                order=order, operator=request.user, operator_name=request.user.username,
+                action=OrderLog.ACTION_PAY_SUCCESS,
+                message=f"支付宝支付成功，流水号：{trade_no}",
+                ip_address=get_client_ip(request),
+            )
+            logger.info(f"订单支付状态同步成功: {order_number}")
+            return common_response(status=status.HTTP_200_OK, message="支付成功", data={
+                "order_number": order.order_number,
+                "status": order.status,
+                "is_paid": True,
+            })
+
+        logger.info(f"订单未支付: {order_number}, trade_status={trade_status}")
+        return common_response(status=status.HTTP_200_OK, message="订单尚未支付", data={
+            "order_number": order.order_number,
+            "status": order.status,
+            "is_paid": False,
         })
 
 

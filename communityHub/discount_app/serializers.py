@@ -54,6 +54,8 @@ class CouponTemplateSerializer(serializers.ModelSerializer):
 
 
 class CouponTemplateUpdateSerializer(serializers.ModelSerializer):
+    """ 优惠券模板修改序列化器 """
+
     # 时间允许调整（如延长活动）
     valid_from = serializers.DateTimeField(
         format="%Y-%m-%d %H:%M:%S",
@@ -80,7 +82,7 @@ class CouponTemplateResponseSerializer(serializers.ModelSerializer):
         fields = "__all__"
 
 
-class UserCouponSerializer(serializers.ModelSerializer):
+class CouponIDSerializer(serializers.ModelSerializer):
     """ 用户优惠券序列化器 """
 
     coupon_template_id = serializers.IntegerField(write_only=True, required=True, help_text="优惠券模板id")

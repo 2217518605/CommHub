@@ -1,5 +1,6 @@
 import logging
 
+from django.db import DatabaseError
 from rest_framework.viewsets import ViewSet
 from rest_framework import status
 from django_ratelimit.decorators import ratelimit
@@ -13,9 +14,9 @@ from organization_app.models import Organization
 from order_app.models import Order
 from goods_app.models import Goods
 from discount_app.models import CouponTemplate, UserCoupon, CouponReceiveLog
-from config.decorators.common import api_doc, api_post, api_put,api_get
+from config.decorators.common import api_doc, api_post, api_put, api_get, api_delete
 from discount_app.serializers import CouponTemplateSerializer, CouponTemplateResponseSerializer, \
-    CouponTemplateUpdateSerializer, UserCouponSerializer
+    CouponTemplateUpdateSerializer, CouponIDSerializer
 from config.help_tools import common_response, get_object_or_404, get_client_ip
 from config.authentication import IsAdminOrSuper, IsCommonUser
 
@@ -23,7 +24,7 @@ logger = logging.getLogger(__name__)
 
 
 class CouponRetrieveViewSet(ViewSet):
-    permission_classes = [IsCommonUser]  # 所有登录用户可查看，增改需管理员
+    permission_classes = [IsCommonUser]  # 所有登录用户可查看，增改删需管理员
 
     @api_doc(tags=["优惠券 优惠卷模板创建"], request_body=CouponTemplateSerializer,
              response_body=CouponTemplateResponseSerializer)
@@ -51,8 +52,6 @@ class CouponRetrieveViewSet(ViewSet):
 
     @api_doc(tags=["优惠券 优惠卷模板修改"], request_body=CouponTemplateUpdateSerializer,
              response_body=CouponTemplateResponseSerializer)
-
-
     @api_put
     @transaction.atomic
     @method_decorator(ratelimit(key='user', rate='5/m', method='PUT', block=True))
@@ -85,11 +84,44 @@ class CouponRetrieveViewSet(ViewSet):
         return common_response(
             status.HTTP_200_OK, "修改成功", CouponTemplateResponseSerializer(instance).data)
 
+    @api_doc(tags=["优惠券 优惠券模板删除"], request_body=CouponIDSerializer, response_body=None)
+    @transaction.atomic
+    @api_delete
+    def destroy(self, request, pk):
+
+        user = request.user
+        if user.is_staff is False:
+            return common_response(status.HTTP_403_FORBIDDEN, message="您没有权限删除模板，请联系管理员！")
+
+        try:
+            coupon_template = get_object_or_404(
+                CouponTemplate.objects.select_for_update(of=('self',)),
+                msg="要删除的模板不存在", pk=pk)
+
+            # 查验优惠券是否已经被用户领取：
+            claimed = UserCoupon.objects.filter(coupon_template=coupon_template)
+            update_rows = claimed.update(status=2)  # 把用户已经领取的标记成过期
+            if update_rows == 0:
+                coupon_template.delete()
+                msg = "优惠券模板已彻底删除"
+            else:
+                coupon_template.is_active = False
+                coupon_template.save()
+                msg = "存在用户已领取优惠券，模板已停用，所有已领券标记为过期"
+            logger.info(f"优惠券模板删除，优惠券模板id:{pk}, 操作人:{user.id}, 结果:{msg}")
+            return common_response(status.HTTP_200_OK, message=msg)
+        except DatabaseError as e:
+            logger.error(f"删除模板数据库异常 pk:{pk}, err:{str(e)}")
+            return common_response(status.HTTP_500_INTERNAL_SERVER_ERROR, message="删除模板数据库异常")
+        except Exception as e:
+            logger.error(f"删除模板未知异常 pk:{pk}, err:{str(e)}", exc_info=True)
+            return common_response(status.HTTP_500_INTERNAL_SERVER_ERROR, message="服务器异常，请联系管理员")
+
 
 class UserCouponViewSet(ViewSet):
     permission_classes = [IsCommonUser]
 
-    @api_doc(tags=["优惠券 用户领取优惠券"], request_body=UserCouponSerializer,
+    @api_doc(tags=["优惠券 用户领取优惠券"], request_body=CouponIDSerializer,
              response_body=CouponTemplateResponseSerializer)
     @transaction.atomic
     @method_decorator(ratelimit(key='user', rate='10/m', method='POST', block=True))
@@ -216,5 +248,4 @@ class UserCouponViewSet(ViewSet):
 
 
 class UserQueryCouponViewSet:
-
     pass
