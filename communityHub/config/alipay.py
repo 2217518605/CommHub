@@ -12,10 +12,8 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding
 from alipay.aop.api.AlipayClientConfig import AlipayClientConfig
 from alipay.aop.api.DefaultAlipayClient import DefaultAlipayClient
-from alipay.aop.api.domain.AlipayTradeCreateModel import AlipayTradeCreateModel
 from alipay.aop.api.domain.AlipayTradePrecreateModel import AlipayTradePrecreateModel
 from alipay.aop.api.domain.AlipayTradePagePayModel import AlipayTradePagePayModel
-from alipay.aop.api.request.AlipayTradeCreateRequest import AlipayTradeCreateRequest
 from alipay.aop.api.request.AlipayTradePrecreateRequest import AlipayTradePrecreateRequest
 from alipay.aop.api.request.AlipayTradePagePayRequest import AlipayTradePagePayRequest
 from alipay.aop.api.request.AlipayTradeQueryRequest import AlipayTradeQueryRequest
@@ -59,45 +57,11 @@ class AlipayClient:
         )
 
     def build_qr_payment_url(self, *, order_number: str, total_amount: Decimal, subject: str, body: str = "") -> AlipayPaymentResult:
-        """使用 Alipay SDK 生成当面付二维码
+        """使用 alipay.trade.precreate 生成当面付二维码
 
-        先调用 alipay.trade.create 在支付宝系统创建交易，
-        再调用 alipay.trade.precreate 生成二维码。
-        这样沙箱APP扫码时才能找到交易。
+        直接预下单生成二维码，扫码者登录自己的支付宝账号完成支付。
         """
 
-        # 第一步：创建交易（让订单存在于支付宝系统中）
-        create_model = AlipayTradeCreateModel()
-        create_model.out_trade_no = order_number
-        create_model.total_amount = str(total_amount)
-        create_model.subject = subject
-        create_model.buyer_id = ""  # 不指定买家，让扫码者支付
-
-        create_request = AlipayTradeCreateRequest(biz_model=create_model)
-        create_request.notify_url = settings.ALIPAY_NOTIFY_URL or ""
-
-        for attempt in range(2):
-            try:
-                response = self.sdk_client.execute(create_request)
-                if isinstance(response, str):
-                    response = json.loads(response)
-                if response.get("code") == "10000":
-                    logger.info(f"支付宝交易创建成功: {order_number}")
-                    break
-                if response.get("sub_code") == "ACQ.TRADE_HAS_EXIST":
-                    logger.info(f"支付宝交易已存在: {order_number}")
-                    break
-                logger.warning(f"创建交易返回: {response}")
-                break  # 非重试类错误，直接跳出
-            except Exception as exc:
-                msg = str(exc)
-                if "504" in msg or "timed out" in msg.lower():
-                    logger.warning(f"创建交易 504/超时，第{attempt+1}次重试: {order_number}")
-                    time.sleep(1)
-                    continue
-                raise
-
-        # 第二步：生成当面付二维码
         precreate_model = AlipayTradePrecreateModel()
         precreate_model.out_trade_no = order_number
         precreate_model.total_amount = str(total_amount)
@@ -107,7 +71,7 @@ class AlipayClient:
         precreate_request.notify_url = settings.ALIPAY_NOTIFY_URL or ""
 
         last_error = None
-        for attempt in range(2):
+        for attempt in range(3):
             try:
                 response = self.sdk_client.execute(precreate_request)
                 if isinstance(response, str):
@@ -131,11 +95,11 @@ class AlipayClient:
                 msg = str(exc)
                 if "504" in msg or "timed out" in msg.lower():
                     logger.warning(f"支付宝预下单 504/超时，第{attempt+1}次重试: {order_number}")
-                    time.sleep(1)
+                    time.sleep(2)
                     continue
                 raise
 
-        logger.error(f"生成支付宝二维码失败(重试2次): {order_number}")
+        logger.error(f"生成支付宝二维码失败(重试3次): {order_number}")
         logger.error(traceback.format_exc())
         raise last_error
 
@@ -179,7 +143,7 @@ class AlipayClient:
 
         request_obj = AlipayTradeQueryRequest(biz_model=model)
 
-        for attempt in range(3):
+        for attempt in range(5):
             try:
                 response = self.sdk_client.execute(request_obj)
                 if isinstance(response, str):
@@ -190,11 +154,11 @@ class AlipayClient:
                 msg = str(exc)
                 if "504" in msg or "timed out" in msg.lower():
                     logger.warning(f"查询订单 504/超时，第{attempt+1}次重试: {order_number}")
-                    time.sleep(2)
+                    time.sleep(3)
                     continue
                 raise
 
-        raise RuntimeError(f"查询订单状态失败(重试3次): {order_number}")
+        raise RuntimeError(f"查询订单状态失败(重试5次): {order_number}")
 
     def verify_notify(self, request_data: Dict[str, Any]) -> bool:
         signature = request_data.get("sign")
