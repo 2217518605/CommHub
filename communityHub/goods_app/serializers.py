@@ -155,20 +155,47 @@ class GoodsQueryByNameSerializer(serializers.ModelSerializer):
 class GoodsCommentsSerializer(serializers.ModelSerializer):
     """ 商品评论序列化器 """
 
+    parent = serializers.PrimaryKeyRelatedField(queryset=GoodsComments.objects.all(), required=False, allow_null=True)
+
     class Meta:
         model = GoodsComments
         fields = "__all__"
+        extra_kwargs = {
+            "user": {"required": False},
+        }
 
 
 class GoodsCommentsResponseSerializer(serializers.ModelSerializer):
     """ 商品评论返参序列化器 """
 
-    goods_name = serializers.CharField(write_only=True, help_text="评论的商品名称", source="goods.name")
-    user_name = serializers.CharField(write_only=True, help_text="评论的用户名称", source="user.name")
+    goods_name = serializers.CharField(read_only=True, source="goods.name")
+    user_name = serializers.CharField(read_only=True, source="user.username")
+    user_avatar = serializers.SerializerMethodField()
+    reply_to_id = serializers.IntegerField(read_only=True, source="parent_id", default=None)
+    reply_to_user_name = serializers.SerializerMethodField()
+    is_liked = serializers.SerializerMethodField()
+
+    def get_user_avatar(self, obj):
+        try:
+            return obj.user.avatar.url if obj.user.avatar else None
+        except Exception:
+            return None
+
+    def get_reply_to_user_name(self, obj):
+        if obj.parent_id and hasattr(obj, 'reply_to_username'):
+            return obj.reply_to_username
+        return None
+
+    def get_is_liked(self, obj):
+        liked_ids = self.context.get('liked_comment_ids', set())
+        return obj.id in liked_ids
+
+    user_id = serializers.IntegerField(read_only=True, source="user.id", default=None)
 
     class Meta:
         model = GoodsComments
-        fields = "__all__"
+        fields = ["id", "comment", "user_name", "user_id", "user_avatar", "reply_to_id", "reply_to_user_name",
+                   "goods_name", "create_time", "like_num", "is_liked"]
         extra_kwargs = {
             "goods": {"write_only": True},
             "user": {"write_only": True}
