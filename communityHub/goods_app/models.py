@@ -145,20 +145,27 @@ class GoodsComments(BaseModel):
     comment = models.TextField(verbose_name="评论", help_text="评论", blank=False, null=False)
     like_num = models.IntegerField(verbose_name="点赞数", help_text="点赞数", blank=False, null=False, default=0)
 
-    # is_deleted = models.BooleanField(verbose_name="评论是否被删除", help_text="评论是否被删除", default=False)
-    # deleted_by = models.ForeignKey(User, verbose_name="删除该评论的用户", help_text="删除该评论的用户", blank=True, null=True,
-    #                                on_delete=models.SET_NULL)
-    # deleted_time = models.DateTimeField(verbose_name="评论删除时间", help_text="评论删除时间", blank=True, null=True)
-
     def get_display_replies(self):
         """ 获取所有子级回复的前五条 """
-
         return self.replies.all()[:5]
 
     class Meta:
         db_table = "t_goods_comments"
         verbose_name = "用户评论"
         verbose_name_plural = verbose_name
+
+
+class CommentLike(BaseModel):
+    """ 评论点赞记录，确保一个用户对一条评论只能点赞一次 """
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE, verbose_name="点赞用户", related_name='comment_likes')
+    comment = models.ForeignKey(GoodsComments, on_delete=models.CASCADE, verbose_name="被赞评论", related_name='likes')
+
+    class Meta:
+        db_table = "t_comment_like"
+        verbose_name = "评论点赞记录"
+        verbose_name_plural = verbose_name
+        unique_together = ("user", "comment")
 
 
 class GoodsCommentsLog(BaseModel):
