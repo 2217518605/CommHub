@@ -203,7 +203,7 @@ class OrderRetrieveViewSet(ViewSet):
         return common_response(status=status.HTTP_200_OK, message="订单 修改成功",
                                data=OrderResponseSerializer(order).data)
 
-    @api_doc(tags=["订单 订单删除"], response_body=OrderResponseSerializer)
+    @api_doc(tags=["订单 订单取消"], response_body=OrderResponseSerializer)
     @api_delete
     @method_decorator(ratelimit(key="ip", rate="5/m", block=True, method="DELETE"))
     def destroy(self, request, order_number):

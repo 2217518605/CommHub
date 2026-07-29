@@ -53,6 +53,7 @@ INSTALLED_APPS = [
     'order_app',  # 订单应用
     'discount_app',  # 优惠券应用
     # 'django_celery_beat',  # 定时任务
+    "wallet_app", # 用户钱包应用
 ]
 
 MIDDLEWARE = [
