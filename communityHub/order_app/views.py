@@ -28,6 +28,7 @@ class OrderRetrieveViewSet(ViewSet):
     @api_doc(tags=["订单 订单创建"], request_body=OrderCommonSerializer, response_body=OrderResponseSerializer)
     @api_post
     @method_decorator(ratelimit(key="ip", rate="5/m", block=True, method="POST"))  # 防止恶意刷单
+    @transaction.atomic
     def create(self, request):
         user = request.user
         user_coupon_id = request.data.get("user_coupon_id")
@@ -39,6 +40,13 @@ class OrderRetrieveViewSet(ViewSet):
         if not org:
             logger.warning("订单 当前用户未加入组织，无法创建订单")
             return common_response(status=status.HTTP_403_FORBIDDEN, message="订单 当前用户未加入组织，无法创建订单")
+        
+        idempotency_key = request.data.get("idempotency_key") # 这个是幂等键，防止重复创建订单,前端请求会携带
+        if idempotency_key:
+            existing_order = Order.objects.filter(user=user, idempotency_key=idempotency_key).first()
+            if existing_order:
+                logger.warning("订单 幂等键已存在，无法创建订单")
+                return common_response(status=status.HTTP_400_BAD_REQUEST, message="订单 订单已存在，无法重复创建订单")
 
         serializer = OrderCommonSerializer(data=request.data, context={"user": user, "organization": org})
         if not serializer.is_valid():
@@ -46,7 +54,8 @@ class OrderRetrieveViewSet(ViewSet):
             return common_response(status=status.HTTP_400_BAD_REQUEST, message="订单 创建失败，参数校验失败",
                                    data=serializer.errors)
 
-        goods = get_object_or_404(Goods.objects.select_related("user", "organization"), msg="商品不存在",
+        # 加行锁，防止超卖
+        goods = get_object_or_404(Goods.objects.select_related("user", "organization").select_for_update(), msg="商品不存在",
                                   id=serializer.validated_data.get("goods_id"))
 
         user_coupon = None
@@ -80,6 +89,10 @@ class OrderRetrieveViewSet(ViewSet):
             return common_response(status=status.HTTP_400_BAD_REQUEST, message="订单 商品已下架，无法创建订单")
 
         good_count = serializer.validated_data["good_count"]
+        if goods.number < good_count:
+            logger.warning("订单 商品库存不足，无法创建订单")
+            return common_response(status=status.HTTP_400_BAD_REQUEST, message="订单 商品库存不足，无法创建订单")
+        
         freight_price = serializer.validated_data.get("freight_price") or Decimal("0")
         discount_price = user_coupon.snapshot_value if user_coupon else Decimal("0")
         total_price = goods.price * good_count
@@ -93,50 +106,54 @@ class OrderRetrieveViewSet(ViewSet):
 
         pay_price = total_price - discount_price + freight_price
         try:
-            with transaction.atomic():
-                order = Order.objects.create(
-                    user=user,
-                    organization=org,
-                    goods=goods,
-                    order_number=create_order_number(),
-                    transaction_id=create_transaction_id(),
-                    status=serializer.validated_data.get("status", Order.STATUS_WAIT_PAY),
-                    pay_method=serializer.validated_data.get("pay_method"),
-                    pay_time=serializer.validated_data.get("pay_time"),
-                    good_price=goods.price,
-                    good_count=good_count,
-                    total_price=total_price,
-                    discount_price=discount_price,
-                    freight_price=freight_price,
-                    pay_price=pay_price,
-                    order_remaining_time=serializer.validated_data.get("order_remaining_time"),
-                    courier_person=serializer.validated_data.get("courier_person"),
-                    courier_phone=serializer.validated_data.get("courier_phone"),
-                    courier_number=create_courier_number(),
-                    address=serializer.validated_data.get("address"),
-                    delivery_time=serializer.validated_data.get("delivery_time"),
-                    source=serializer.validated_data.get("source", Order.SOURCE_WECHAT_MINI_PROGRAM),
-                    goods_name=goods.name,
-                    goods_spec=serializer.validated_data.get("goods_spec") or {},
-                    goods_image=str(goods.big_img or goods.small_img or ""),
-                    user_coupon=user_coupon,
-                    user_remark=serializer.validated_data.get("user_remark"),
-                    admin_remark=serializer.validated_data.get("admin_remark")
-                )
+            order = Order.objects.create(
+                user=user,
+                organization=org,
+                goods=goods,
+                order_number=create_order_number(),
+                transaction_id=create_transaction_id(),
+                status=serializer.validated_data.get("status", Order.STATUS_WAIT_PAY),
+                pay_method=serializer.validated_data.get("pay_method"),
+                pay_time=serializer.validated_data.get("pay_time"),
+                good_price=goods.price,
+                good_count=good_count,
+                total_price=total_price,
+                discount_price=discount_price,
+                freight_price=freight_price,
+                pay_price=pay_price,
+                order_remaining_time=serializer.validated_data.get("order_remaining_time"),
+                courier_person=serializer.validated_data.get("courier_person"),
+                courier_phone=serializer.validated_data.get("courier_phone"),
+                courier_number=create_courier_number(),
+                address=serializer.validated_data.get("address"),
+                delivery_time=serializer.validated_data.get("delivery_time"),
+                source=serializer.validated_data.get("source", Order.SOURCE_WECHAT_MINI_PROGRAM),
+                goods_name=goods.name,
+                goods_spec=serializer.validated_data.get("goods_spec") or {},
+                goods_image=str(goods.big_img or goods.small_img or ""),
+                user_coupon=user_coupon,
+                user_remark=serializer.validated_data.get("user_remark"),
+                admin_remark=serializer.validated_data.get("admin_remark"),
+                idempotency_key=idempotency_key
+            )
 
-                if user_coupon:
-                    user_coupon.status = 1
-                    user_coupon.used_time = timezone.now()
-                    user_coupon.order = order
-                    user_coupon.save(update_fields=["status", "used_time", "order", "update_time"])
+            if user_coupon:
+                user_coupon.status = 1
+                user_coupon.used_time = timezone.now()
+                user_coupon.order = order
+                user_coupon.save(update_fields=["status", "used_time", "order", "update_time"])
 
-                OrderLog.objects.create(order=order, operator=user, operator_name=user.username,
-                                        action=OrderLog.ACTION_CREATE_ORDER, message="创建订单成功",
-                                        ip_address=get_client_ip(request))
+            OrderLog.objects.create(order=order, operator=user, operator_name=user.username,
+                                    action=OrderLog.ACTION_CREATE_ORDER, message="创建订单成功",
+                                    ip_address=get_client_ip(request))
 
-                logger.info(f"订单 创建成功,订单创建人为：{user.username}")
-                return common_response(status=status.HTTP_201_CREATED, message="订单 创建成功",
-                                       data=OrderResponseSerializer(order).data)
+            # 减少商品库存
+            goods.number -= good_count
+            goods.save(update_fields=["number"])
+
+            logger.info(f"订单 创建成功,订单创建人为：{user.username}")
+            return common_response(status=status.HTTP_201_CREATED, message="订单 创建成功",
+                                   data=OrderResponseSerializer(order).data)
         except Exception as e:
             logger.error(f"订单 创建失败：{e}", exc_info=True)
             return common_response(status=status.HTTP_500_INTERNAL_SERVER_ERROR, message="订单 创建失败")

@@ -95,6 +95,7 @@ class Order(BaseModel):
     admin_remark = models.CharField(verbose_name="后台备注", max_length=255, blank=True, null=True)
 
     is_deleted = models.BooleanField(default=False, verbose_name="是否删除")
+    idempotency_key = models.CharField(max_length=64, verbose_name='幂等键', blank=True, null=True,default=None)
 
     class Meta:
         db_table = "t_order"
@@ -106,7 +107,8 @@ class Order(BaseModel):
             models.Index(fields=["order_number"])  # 订单编号查询
         ]
         unique_together = [
-            ["user", "order_number"]
+            ["user", "order_number"],
+            ["user", "idempotency_key"]
         ]  # 订单编号和用户不能重复
 
     def __str__(self):
