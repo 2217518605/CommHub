@@ -1,6 +1,6 @@
 from django.urls import path
 
-from .views import GoodsRetrieveViewSet, GoodsCommentsRetrieveViewSet,GoodsCommentsListViewSet,GoodsCommentsLikeNumViewSet,GoodsListViewSet
+from .views import GoodsRetrieveViewSet, GoodsCommentsRetrieveViewSet,GoodsCommentsListViewSet,GoodsCommentsLikeNumViewSet,GoodsListViewSet,GoodsCommentsCascadeDeleteViewSet
 
 urlpatterns = [
     path("goods_retrieve/<int:pk>/",
@@ -12,6 +12,8 @@ urlpatterns = [
          name="goods_comments_retrieve"),
     path("goods_comments_retrieve/<int:pk>/", GoodsCommentsRetrieveViewSet.as_view({"delete": "destroy"}),
          name="goods_comments_retrieve"),
+    path("goods_comments_cascade_delete/<int:pk>/", GoodsCommentsCascadeDeleteViewSet.as_view({"delete": "cascade_destroy"}),
+         name="goods_comments_cascade_delete"),
     path("goods_comments_list/", GoodsCommentsListViewSet.as_view({"post": "list"})),
     path("goods_comment_increase_like_num/", GoodsCommentsLikeNumViewSet.as_view({"post": "increase_like_num"})),
     path("goods_list_by_query_name/", GoodsListViewSet.as_view({"post": "list_by_query_name"})),

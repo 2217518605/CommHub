@@ -7,6 +7,7 @@ from django.conf import settings
 from django.core.cache import cache
 from rest_framework.viewsets import ViewSet
 from rest_framework import status
+from rest_framework.permissions import IsAuthenticated
 
 from config.decorators.common import api_doc, api_get, api_post, api_put, api_delete
 from user_app.models import User
@@ -265,6 +266,50 @@ class GoodsCommentsRetrieveViewSet(ViewSet):
         comment.delete()
         logger.info(f'商品评论 删除成功：商品评论ID：{pk}')
         return common_response(status=status.HTTP_200_OK, message="商品评论删除成功")
+
+
+class GoodsCommentsCascadeDeleteViewSet(ViewSet):
+    """级联删除评论及其所有子回复"""
+    permission_classes = [IsAuthenticated]
+
+    @api_doc(tags=["商品评论 级联删除评论"], request_body=GoodsCommentsRetrieveSerializer,
+             response_body=EmptySerializer)
+    @api_delete
+    @transaction.atomic
+    def cascade_destroy(self, request, pk):
+
+        current_user = request.user
+        comment = get_object_or_404(GoodsComments.objects.select_related('user', 'goods', "user__organization"), pk=pk)
+
+        is_admin = current_user.user_type in ["admin", "super_admin"]
+        is_owner = (comment.user == current_user)
+
+        if not (is_admin or is_owner):
+            logger.warning(f'用户 {current_user.username} 没有权限删除商品评论 {comment.id}')
+            return common_response(status=status.HTTP_403_FORBIDDEN, message="用户没有权限删除商品评论")
+
+        def get_all_descendant_ids(comment_id):
+            ids = [comment_id]
+            children = GoodsComments.objects.filter(parent_id=comment_id)
+            for child in children:
+                ids.extend(get_all_descendant_ids(child.id))
+            return ids
+
+        all_ids = get_all_descendant_ids(pk)
+        comments_to_delete = GoodsComments.objects.filter(id__in=all_ids)
+
+        for cmt in comments_to_delete:
+            org = cmt.user.organization if hasattr(cmt.user, "organization") else None
+            GoodsCommentsLog.objects.create(
+                comment=cmt, operator=current_user, organization=org,
+                comment_id_snapshot=cmt.id, content_snapshot=cmt.comment[:500] if cmt.comment else "",
+                operation_type="cascade_delete", ip_address=get_client_ip(request),
+                reason=f"级联删除，父评论ID：{pk}"
+            )
+            
+        deleted_total, deleted_detail = comments_to_delete.delete()
+        logger.info(f'商品评论 级联删除成功：父评论ID={pk}, 删除总数={deleted_total}')
+        return common_response(status=status.HTTP_200_OK, message=f"删除成功，共删除 {deleted_total} 条评论")
 
 
 class GoodsCommentsListViewSet(ViewSet):
