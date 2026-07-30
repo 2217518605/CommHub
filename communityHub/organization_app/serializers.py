@@ -94,6 +94,7 @@ class OrganizationUpdateSerializer(serializers.ModelSerializer):
         required=False,
         validators=[validate_image_format]
     )
+    query_name = serializers.CharField(label="组织搜索词", help_text="组织搜索词", required=False)
 
     class Meta:
         model = Organization

@@ -1,13 +1,11 @@
 import os
 
-import django
 from django.conf import settings
 from celery import Celery
 from celery.schedules import crontab
 
 # 配置环境变量
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "communityHub.settings")
-django.setup()
 
 celery_app = Celery('communityHub_celery')
 

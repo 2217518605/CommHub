@@ -1,4 +1,5 @@
 import logging
+import os
 import time
 import datetime
 
@@ -89,7 +90,7 @@ class UserRetrieveView(ViewSet):
         try:
             user = User.objects.select_related("organization").get(pk=pk)
 
-            serializer = UserUpdateSerializer(instance=user, data=request.data)
+            serializer = UserUpdateSerializer(instance=user, data=request.data, partial=True)
             if serializer.is_valid():
                 update_data = serializer.save()
                 logger.info(

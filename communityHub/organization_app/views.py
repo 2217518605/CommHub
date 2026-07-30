@@ -35,7 +35,10 @@ class OrganizationListView(ViewSet):
     @api_post
     def list(self, request, is_export=False):
         try:
-            org_list = Organization.objects.all().order_by('-create_time', '-id')
+            org_list = Organization.objects.order_by('-create_time', '-id')
+            name = request.data.get("name") or request.data.get("query_name")
+            if name:
+                org_list = org_list.filter(org_name__icontains=name)
             logger.info(f'组织 获取组织列表成功，共获取 {org_list.count()} 条数据')
             paginator = self.pagination_class()
             pagination_data = paginator.paginate_queryset(org_list, request)
@@ -73,13 +76,10 @@ class OrganizationListView(ViewSet):
                 file_path = os.path.join(parent_file_path, f'组织列表_{now_time}.xlsx')
                 wb.save(file_path)
                 logger.info(f'组织 组织列表导出成功，文件路径：{file_path}')
+                self._export_file_path = file_path
 
             serializer_data = OrganizationResponseSerializer(pagination_data, many=True)
-            return paginator.get_paginated_response({
-                "status": status.HTTP_200_OK,
-                "message": "获取组织列表成功",
-                "data": serializer_data.data
-            })
+            return paginator.get_paginated_response(serializer_data.data)
         except Exception as e:
             logger.error(f'组织 获取组织列表错误：{e}', exc_info=True)
             return common_response(status=status.HTTP_500_INTERNAL_SERVER_ERROR, message="服务器内部错误")
@@ -89,7 +89,14 @@ class OrganizationListView(ViewSet):
     def list_export(self, request):
         try:
             self.list(request, is_export=True)
-            return common_response(status=status.HTTP_200_OK, message="组织列表导出成功")
+            file_path = getattr(self, '_export_file_path', None)
+            if not file_path or not os.path.exists(file_path):
+                return common_response(status=status.HTTP_500_INTERNAL_SERVER_ERROR, message="导出文件生成失败")
+            file_name = os.path.basename(file_path)
+            with open(file_path, 'rb') as f:
+                response = HttpResponse(f.read(), content_type=self.EXCEL_MIME_TYPE)
+                response['Content-Disposition'] = f"attachment; filename*=UTF-8''{file_name}"
+                return response
         except Exception as e:
             logger.error(f'组织 组织列表导出错误：{e}', exc_info=True)
             return common_response(status=status.HTTP_500_INTERNAL_SERVER_ERROR, message="服务器内部错误")

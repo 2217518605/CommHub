@@ -53,6 +53,7 @@ INSTALLED_APPS = [
     'order_app',  # 订单应用
     'discount_app',  # 优惠券应用
     # 'django_celery_beat',  # 定时任务
+    "wallet_app", # 用户钱包应用
 ]
 
 MIDDLEWARE = [
@@ -157,22 +158,27 @@ STATICFILES_DIRS = [
 # 执行 collectstatic 命令后，所有静态文件会被复制到该目录
 STATIC_ROOT = BASE_DIR / 'collected_static'
 
-# CACHES = {
-#     "default":{
-#         "BACKEND": "django.core.cache.backends.redis.RedisCache",
-#         "LOCATION": "redis://127.0.0.1:6379", # 缓存的地址
-#         "TIMEOUT": 300,
-#         "OPTIONS":{
-#             "db":1,
-#             # "PASSWORD": "123456",
-#             'pool_class': 'redis.BlockingConnectionPool',  # 缓存的连接池
-#         }
-#     }
-# }
-#
-# CACHE_MIDDLEWARE_ALIAS = "default"
-# CACHE_MIDDLEWARE_SECONDS = 10 # 缓存的过期时间,10秒
-# CACHE_MIDDLEWARE_KEY_PREFIX = "cache" # 缓存的键的前缀
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.redis.RedisCache",
+        "LOCATION": "redis://127.0.0.1:6379/1",
+        "TIMEOUT": 300,
+        "OPTIONS": {
+            "db": 1,
+            "pool_class": "redis.BlockingConnectionPool",
+        },
+    }
+}
+
+CACHE_MIDDLEWARE_ALIAS = "default"
+CACHE_MIDDLEWARE_SECONDS = 10
+CACHE_MIDDLEWARE_KEY_PREFIX = "cache"
+
+# 商品热门搜索缓存配置
+GOODS_HOT_CACHE_TIMEOUT = 300
+GOODS_HOT_CACHE_PREFIX = "goods:hot"
+GOODS_HOT_QUERY_CACHE_PREFIX = "goods:hot:query"
+GOODS_HOT_CACHE_VERSION_KEY = "goods:hot:version"
 
 # 如果是生产环境关闭全局允许（默认是 False，显式设置更安全）
 CORS_ALLOW_ALL_ORIGINS = True  # 开发环境
@@ -306,6 +312,17 @@ CELERY_TIMEZONE = 'Asia/Shanghai'
 CELERY_IMPORTS = [
     'celery_tasks.clear_expire_coupon',
 ]
+
+# 支付宝沙盒配置
+ALIPAY_APP_ID = os.getenv("ALIPAY_APP_ID", "2021000148624482")
+ALIPAY_PRIVATE_KEY = os.getenv("ALIPAY_PRIVATE_KEY", str(BASE_DIR / "config" / "utils" / "private_key.pem"))
+ALIPAY_ALIPAY_PUBLIC_KEY = os.getenv("ALIPAY_ALIPAY_PUBLIC_KEY", str(BASE_DIR / "config" / "utils" / "public_key.pem"))
+ALIPAY_NOTIFY_URL = os.getenv("ALIPAY_NOTIFY_URL", "")
+ALIPAY_RETURN_URL = os.getenv("ALIPAY_RETURN_URL", "")
+ALIPAY_GATEWAY = os.getenv("ALIPAY_GATEWAY", "http://openapi-sandbox.dl.alipaydev.com/gateway.do")
+ALIPAY_SIGN_TYPE = os.getenv("ALIPAY_SIGN_TYPE", "RSA2")
+ALIPAY_CHARSET = os.getenv("ALIPAY_CHARSET", "utf-8")
+ALIPAY_TIMEOUT = int(os.getenv("ALIPAY_TIMEOUT", "15"))
 
 # 告诉 Celery 使用 django_celery_beat 作为调度器
 # CELERY_BEAT_SCHEDULER = 'django_celery_beat.schedulers:DatabaseScheduler'
