@@ -1,0 +1,1 @@
+import{O as e}from"./index-ip87u6Zl.js";var t=e({show:!1,mode:`confirm`,title:``,message:``,resolve:null});function n(e,n=`确认操作`){return new Promise(r=>{t.show=!0,t.mode=`confirm`,t.title=n,t.message=e,t.resolve=r})}function r(e,n=`提示`){t.show=!0,t.mode=`alert`,t.title=n,t.message=e,t.resolve=null}function i(e){t.show=!1,t.resolve&&=(t.resolve(e),null)}export{n as i,i as n,r,t};
