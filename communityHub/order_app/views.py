@@ -1,4 +1,5 @@
 import logging
+import os
 from datetime import timedelta
 from decimal import Decimal
 
@@ -305,7 +306,8 @@ class OrderPaymentViewSet(ViewSet):
     @api_doc(tags=["订单 生成支付宝网页支付"], request_body=None, response_body=None)
     @api_post
     def page_pay(self, request):
-        """生成支付宝网页支付 HTML，前端直接在新窗口打开即可支付"""
+        """ 生成支付宝网页支付 HTML，前端直接在新窗口打开即可支付 """
+        
         order_number = request.data.get("order_number")
         order = get_object_or_404(Order.objects.select_related("user", "organization", "goods"), msg="订单不存在",
                                   order_number=order_number)
@@ -333,11 +335,11 @@ class OrderPaymentViewSet(ViewSet):
 
     @api_doc(tags=["订单 查询支付状态"], request_body=None, response_body=None)
     @api_post
-    @transaction.atomic
     def check_pay(self, request):
-        """主动查询支付宝支付状态并更新订单"""
+        """ 主动查询支付宝支付状态并更新订单 """
+        
         order_number = request.data.get("order_number")
-        order = get_object_or_404(Order.objects.select_for_update().select_related("user"), msg="订单不存在",
+        order = get_object_or_404(Order.objects.select_related("user"), msg="订单不存在",
                                   order_number=order_number)
 
         if order.user_id != request.user.id:
@@ -357,34 +359,45 @@ class OrderPaymentViewSet(ViewSet):
             logger.error("查询支付状态失败: %s", exc, exc_info=True)
             return common_response(status=status.HTTP_500_INTERNAL_SERVER_ERROR, message="查询支付状态失败")
 
-        trade_status = result.get("trade_status", "")
-        if trade_status in ("TRADE_SUCCESS", "TRADE_FINISHED"):
-            trade_no = result.get("trade_no", "")
-            order.status = Order.STATUS_WAIT_DELIVER
-            order.pay_method = Order.PAY_METHOD_ALIPAY
-            order.pay_time = order.pay_time or timezone.now()
-            order.transaction_id = trade_no or order.transaction_id
-            order.save(update_fields=["status", "pay_method", "pay_time", "transaction_id", "update_time"])
+        with transaction.atomic():
+            order = get_object_or_404(Order.objects.select_for_update(), msg="订单不存在", order_number=order_number)
+            # 确认订单是否存在且未支付:
+            if order.status != Order.STATUS_WAIT_PAY:
+                return common_response(status=status.HTTP_200_OK, message="订单已处理", data={
+                    "order_number": order.order_number,
+                    "status": order.status,
+                    "is_paid": order.status != Order.STATUS_WAIT_PAY,
+                })
+                
+            # 查询支付状态:
+            trade_status = result.get("trade_status", "")
+            if trade_status in ("TRADE_SUCCESS", "TRADE_FINISHED"):
+                trade_no = result.get("trade_no", "")
+                order.status = Order.STATUS_WAIT_DELIVER
+                order.pay_method = Order.PAY_METHOD_ALIPAY
+                order.pay_time = order.pay_time or timezone.now()
+                order.transaction_id = trade_no or order.transaction_id
+                order.save(update_fields=["status", "pay_method", "pay_time", "transaction_id", "update_time"])
 
-            OrderLog.objects.create(
-                order=order, operator=request.user, operator_name=request.user.username,
-                action=OrderLog.ACTION_PAY_SUCCESS,
-                message=f"支付宝支付成功，流水号：{trade_no}",
-                ip_address=get_client_ip(request),
-            )
-            logger.info(f"订单支付状态同步成功: {order_number}")
-            return common_response(status=status.HTTP_200_OK, message="支付成功", data={
+                OrderLog.objects.create(
+                    order=order, operator=request.user, operator_name=request.user.username,
+                    action=OrderLog.ACTION_PAY_SUCCESS,
+                    message=f"支付宝支付成功，流水号：{trade_no}",
+                    ip_address=get_client_ip(request),
+                )
+                logger.info(f"订单支付状态同步成功: {order_number}")
+                return common_response(status=status.HTTP_200_OK, message="支付成功", data={
+                    "order_number": order.order_number,
+                    "status": order.status,
+                    "is_paid": True,
+                })
+
+            logger.info(f"订单未支付: {order_number}, trade_status={trade_status}")
+            return common_response(status=status.HTTP_200_OK, message="订单尚未支付", data={
                 "order_number": order.order_number,
                 "status": order.status,
-                "is_paid": True,
+                "is_paid": False,
             })
-
-        logger.info(f"订单未支付: {order_number}, trade_status={trade_status}")
-        return common_response(status=status.HTTP_200_OK, message="订单尚未支付", data={
-            "order_number": order.order_number,
-            "status": order.status,
-            "is_paid": False,
-        })
 
 
 class AlipayNotifyViewSet(ViewSet):
@@ -409,12 +422,43 @@ class AlipayNotifyViewSet(ViewSet):
         try:
             with transaction.atomic():
                 order = Order.objects.select_for_update().get(order_number=out_trade_no)
+                
+                # 校验订单金额和交易金额是否一致:                
+                if Decimal(order.pay_price) != Decimal(total_amount):
+                    logger.warning(f"订单金额和交易金额不一致，订单号：{order.order_number}，订单金额：{order.pay_price}，交易金额：{total_amount}")
+                    
+                    OrderLog.objects.create(
+                        order=order,
+                        operator=order.user,
+                        operator_name=order.user.username,
+                        action=OrderLog.ACTION_PAY_FAILED,
+                        message=f"支付宝支付失败，订单金额和交易金额不一致，订单号：{order.order_number}，订单金额：{order.pay_price}，交易金额：{total_amount}",
+                        ip_address=get_client_ip(request),
+                    )
+                    return HttpResponse("success")
+                
+                # 校验 app_id 是否一致:
+                app_id = os.getenv("ALIPAY_APP_ID")
+                if app_id != payload.get("app_id"):
+                    logger.warning(f"支付宝回调订单app_id不一致，订单号：{order.order_number}，订单app_id：{order.app_id}，回调app_id：{payload.get('app_id')}")
+                    
+                    OrderLog.objects.create(
+                        order=order,
+                        operator=order.user,
+                        operator_name=order.user.username,
+                        action=OrderLog.ACTION_PAY_FAILED,
+                        message=f"支付宝支付失败，订单app_id不一致，订单号：{order.order_number}，订单app_id：{order.app_id}，回调app_id：{payload.get('app_id')}",
+                        ip_address=get_client_ip(request),
+                    )
+                    return HttpResponse("success")
+                
                 if order.status == Order.STATUS_WAIT_PAY:
                     order.status = Order.STATUS_WAIT_DELIVER
                     order.pay_method = Order.PAY_METHOD_ALIPAY
                     order.pay_time = order.pay_time or timezone.now()
                     order.transaction_id = trade_no or order.transaction_id
                     order.save(update_fields=["status", "pay_method", "pay_time", "transaction_id", "update_time"])
+                    
                     OrderLog.objects.create(
                         order=order,
                         operator=order.user,
@@ -432,4 +476,5 @@ class AlipayNotifyViewSet(ViewSet):
     @api_doc(tags=["订单 支付宝同步跳转"], request_body=None, response_body=None)
     def get(self, request):
         """处理支付宝同步跳转回调。"""
+        
         return self.post(request)
