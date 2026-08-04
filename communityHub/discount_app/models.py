@@ -1,5 +1,6 @@
 from django.utils import timezone
 from django.db import models
+from decimal import Decimal
 
 from models.base import BaseModel
 from user_app.models import User
@@ -22,8 +23,10 @@ class CouponTemplate(BaseModel):
     type = models.SmallIntegerField(choices=TYPE_CHOICES, verbose_name="优惠券类型")
 
     # 门槛配置
-    min_purchase = models.IntegerField(default=0, verbose_name="最低消费金额(分)", help_text="0表示无门槛")
-    discount = models.FloatField(default=1, verbose_name="折扣", help_text="8表示八折")
+    min_purchase = models.IntegerField(default=0, verbose_name="最低消费金额(元)", help_text="0表示无门槛")
+    discount_amount = models.IntegerField(default=0, verbose_name="优惠金额(元)", help_text="0表示无优惠")
+    discount = models.DecimalField(default=Decimal("1.00"), verbose_name="折扣", help_text="8表示八折", max_digits=10, decimal_places=2)
+    
     # 库存配置
     total_count = models.IntegerField(verbose_name="优惠券总量", help_text="0表示不限制数量", default=0)
     person_limit_count = models.IntegerField(verbose_name="每人限领数量", help_text="0表示不限制数量", default=0)
@@ -99,7 +102,7 @@ class UserCoupon(BaseModel):
     status = models.SmallIntegerField(choices=STATUS_CHOICES, default=0, verbose_name="优惠券状态")
 
     # 领券时把模板的数据复制过来(快照)
-    snapshot_value = models.IntegerField(verbose_name="优惠金额/折扣(快照)", help_text="领券时的数值")
+    snapshot_value = models.DecimalField(max_digits=10, decimal_places=2, verbose_name="优惠金额/折扣(快照)", help_text="领券时的数值")
     snapshot_min_purchase = models.IntegerField(verbose_name="最低消费(快照)", default=0)
 
     # 两个时间可以修改（用户领券时生成，或者手动延期）

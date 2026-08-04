@@ -11,6 +11,20 @@ from goods_app.models import Goods
 logger = logging.getLogger(__name__)
 
 
+class OrderCreateSerializer(serializers.Serializer):
+    """用户创建订单时允许提交的字段。"""
+
+    goods_id = serializers.IntegerField(required=True)
+    user_coupon_id = serializers.IntegerField(required=False, allow_null=True)
+    good_count = serializers.IntegerField(required=True, min_value=1)
+    pay_method = serializers.ChoiceField(choices=Order.PAY_METHOD_CHOICES, required=True)
+    freight_price = serializers.DecimalField(max_digits=10, decimal_places=2, required=False, min_value=0)
+    address = serializers.CharField(required=True, max_length=255)
+    goods_spec = serializers.JSONField(required=False, allow_null=True)
+    user_remark = serializers.CharField(required=False, allow_null=True, allow_blank=True, max_length=255)
+    idempotency_key = serializers.CharField(required=False, allow_blank=False, allow_null=True, max_length=64)
+
+
 class OrderCommonSerializer(serializers.ModelSerializer):
     """ 订单通用入参序列化器(创建、更新) """
 

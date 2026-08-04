@@ -76,7 +76,12 @@ class Order(BaseModel):
     freight_price = models.DecimalField(verbose_name="运费", max_digits=10, decimal_places=2, default=0)
     pay_price = models.DecimalField(verbose_name="实际支付价格", max_digits=14, decimal_places=2, default=0)
 
-    order_remaining_time = models.DateTimeField(verbose_name="订单剩余时间", blank=True, null=True)
+    order_remaining_time = models.DateTimeField(
+        verbose_name="订单支付截止时间",
+        blank=True,
+        null=True,
+        help_text="待付款订单的支付截止时间",
+    )
 
     courier_person = models.CharField(verbose_name="快递员", max_length=32, blank=True, null=True)
     courier_phone = models.CharField(verbose_name="快递员手机号", max_length=32, blank=True, null=True)
@@ -95,7 +100,7 @@ class Order(BaseModel):
     admin_remark = models.CharField(verbose_name="后台备注", max_length=255, blank=True, null=True)
 
     is_deleted = models.BooleanField(default=False, verbose_name="是否删除")
-    idempotency_key = models.CharField(max_length=64, verbose_name='幂等键', default="")
+    idempotency_key = models.CharField(max_length=64, verbose_name='幂等键', default=None, null=True, blank=True)
 
     class Meta:
         db_table = "t_order"

@@ -165,6 +165,7 @@ class UserCouponViewSet(ViewSet):
                     return common_response(
                         status.HTTP_400_BAD_REQUEST, message="该优惠券已经被抢光了，无库存"
                     )
+                    
                 # 刷新coupon_template 对象
                 coupon_template.refresh_from_db()
 
@@ -177,6 +178,14 @@ class UserCouponViewSet(ViewSet):
                         status.HTTP_400_BAD_REQUEST,
                         message=f"每个用户限领{coupon_template.person_limit_count}张优惠券"
                     )
+                    
+            # 判断优惠券的类型：
+            if coupon_template.type == 2:
+                # 折扣券
+                snapshot_value = coupon_template.discount
+            else:
+                # 满减券和无门槛券
+                snapshot_value = coupon_template.discount_amount
 
             # 发劵：
             user_coupon = UserCoupon.objects.create(
@@ -188,7 +197,7 @@ class UserCouponViewSet(ViewSet):
                 order=None,
                 used_time=None,
                 status=0,
-                snapshot_value=coupon_template.discount,
+                snapshot_value=snapshot_value,
                 snapshot_min_purchase=coupon_template.min_purchase
             )
 

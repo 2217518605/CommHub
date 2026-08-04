@@ -1,6 +1,8 @@
 import logging
+from datetime import timedelta
 from decimal import Decimal
 
+from django.conf import settings
 from django.db import transaction
 from django.http import HttpResponse
 from django.utils import timezone
@@ -17,9 +19,11 @@ from config.decorators.common import api_delete, api_doc, api_post, api_put
 from config.help_tools import CommonPageNumberPagination, common_response, get_client_ip, get_object_or_404
 from goods_app.models import Goods
 from order_app.models import Order, OrderLog
-from order_app.serializers import OrderCommonSerializer, OrderQuerySerializer, OrderResponseSerializer
+from order_app.serializers import OrderCreateSerializer, OrderCommonSerializer, OrderQuerySerializer, OrderResponseSerializer
 from order_app.validators import create_courier_number, create_order_number, create_transaction_id
+from order_app.services import release_unpaid_order
 from discount_app.models import UserCoupon
+from discount_app.utils import calculate_discount
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +31,7 @@ logger = logging.getLogger(__name__)
 class OrderViewSet(ViewSet):
     permission_classes = [IsCommonUser]
 
-    @api_doc(tags=["订单 订单创建"], request_body=OrderCommonSerializer, response_body=OrderResponseSerializer)
+    @api_doc(tags=["订单 订单创建"], request_body=OrderCreateSerializer, response_body=OrderResponseSerializer)
     @api_post
     @method_decorator(ratelimit(key="ip", rate="5/m", block=True, method="POST"))  # 防止恶意刷单
     def create(self, request):
@@ -49,7 +53,7 @@ class OrderViewSet(ViewSet):
                 logger.warning("订单 幂等键已存在，无法创建新的订单")
                 return common_response(status=status.HTTP_200_OK, message="订单已存在", data=OrderResponseSerializer(existing_order).data)
 
-        serializer = OrderCommonSerializer(data=request.data, context={"user": user, "organization": org})
+        serializer = OrderCreateSerializer(data=request.data, context={"user": user, "organization": org})
         if not serializer.is_valid():
             logger.warning(f"订单 创建失败，参数校验失败：{serializer.errors}")
             return common_response(status=status.HTTP_400_BAD_REQUEST, message="订单 创建失败，参数校验失败",
@@ -86,9 +90,9 @@ class OrderViewSet(ViewSet):
                     logger.warning("订单 商品不属于当前用户组织，无法创建订单")
                     raise ValidationError("订单 商品不属于当前用户组织，无法创建订单")
 
-                if goods.status in [Goods.STATUS_OFFSHELF, Goods.STATUS_SOLDOUT]:
-                    logger.warning("订单 商品已下架，无法创建订单")
-                    raise ValidationError("订单 商品已下架，无法创建订单")
+                if goods.status in [Goods.STATUS_OFFSHELF, Goods.STATUS_SOLDOUT,Goods.STATUS_PENDING]:
+                    logger.warning("订单 商品状态异常   ，无法创建订单")
+                    raise ValidationError("订单 商品状态异常，无法创建订单")
 
                 good_count = serializer.validated_data["good_count"]
                 if goods.number < good_count:
@@ -98,14 +102,14 @@ class OrderViewSet(ViewSet):
                 freight_price = serializer.validated_data.get("freight_price") or Decimal("0")
                 discount_price = user_coupon.snapshot_value if user_coupon else Decimal("0")
                 total_price = goods.price * good_count
-
+                
                 if user_coupon:
-                    snapshot_min_purchase = user_coupon.snapshot_min_purchase
-                    if total_price < snapshot_min_purchase:
-                        logger.warning("订单 优惠券不满足最低使用金额，无法创建订单")
-                        raise ValidationError("订单 优惠券不满足最低使用金额，无法创建订单")
+                    discount_price = calculate_discount(user_coupon,total_price)
+                else:
+                    discount_price = Decimal("0")
+                real_total_price = total_price - discount_price
 
-                pay_price = total_price - discount_price + freight_price
+                pay_price = real_total_price + freight_price
                 
                 order = Order.objects.create(
                     user=user,
@@ -122,7 +126,9 @@ class OrderViewSet(ViewSet):
                     discount_price=discount_price,
                     freight_price=freight_price,
                     pay_price=pay_price,
-                    order_remaining_time=serializer.validated_data.get("order_remaining_time"),
+                    order_remaining_time=timezone.now() + timedelta(
+                        seconds=settings.ORDER_PAYMENT_TIMEOUT
+                    ),
                     courier_person=serializer.validated_data.get("courier_person"),
                     courier_phone=serializer.validated_data.get("courier_phone"),
                     courier_number=create_courier_number(),
@@ -235,29 +241,29 @@ class OrderViewSet(ViewSet):
     @method_decorator(ratelimit(key="ip", rate="5/m", block=True, method="DELETE"))
     def destroy(self, request, order_number):
         user = request.user
-        order = get_object_or_404(Order.objects.select_related("user", "organization"), msg="订单不存在",
-                                  order_number=order_number)
+        order = get_object_or_404(Order.objects.select_related("user"), msg="订单不存在", order_number=order_number)
 
         if order.user != request.user:
             logger.warning("订单 删除订单不属于当前用户，无权删除")
             return common_response(status=status.HTTP_403_FORBIDDEN, message="订单 删除订单不属于当前用户，无权删除")
 
         try:
-            with transaction.atomic():
-                OrderLog.objects.create(order=order, operator=request.user, operator_name=request.user.username,
-                                        action=OrderLog.ACTION_CANCEL_ORDER, message="删除订单成功",
-                                        ip_address=get_client_ip(request))
+            released = release_unpaid_order(
+                order.id,
+                operator=request.user,
+                operator_name=request.user.username,
+                action=OrderLog.ACTION_CANCEL_ORDER,
+                message="用户取消未付款订单，已释放库存和优惠券",
+                ip_address=get_client_ip(request),
+            )
+            if not released:
+                return common_response(status=status.HTTP_400_BAD_REQUEST, message="订单当前状态不允许取消")
 
-                if order.status == Order.STATUS_WAIT_PAY:
-                    order.status = Order.STATUS_CANCELLED
-                order.is_deleted = True
-                order.save()
-
-                logger.info(f"订单 删除订单{order_number}成功,订单删除人为：{user.username}")
-                return common_response(status=status.HTTP_200_OK, message="订单 删除成功")
+            logger.info(f"订单 删除订单{order_number}成功,订单删除人为：{user.username}")
+            return common_response(status=status.HTTP_200_OK, message="订单 删除成功")
         except Exception as e:
             logger.error(f"订单 删除订单失败：{e}", exc_info=True)
-            return common_response(status=status.HTTP_500_INTERNAL_SERVER_ERROR, message="订单 删除订单失败")
+            return common_response(status=status.HTTP_500_INTERNAL_SERVER_ERROR, message="订单 删除失败")
 
 
 class OrderPaymentViewSet(ViewSet):
@@ -356,7 +362,7 @@ class OrderPaymentViewSet(ViewSet):
             trade_no = result.get("trade_no", "")
             order.status = Order.STATUS_WAIT_DELIVER
             order.pay_method = Order.PAY_METHOD_ALIPAY
-            order.pay_time = order.pay_time or order.create_time
+            order.pay_time = order.pay_time or timezone.now()
             order.transaction_id = trade_no or order.transaction_id
             order.save(update_fields=["status", "pay_method", "pay_time", "transaction_id", "update_time"])
 
@@ -406,7 +412,7 @@ class AlipayNotifyViewSet(ViewSet):
                 if order.status == Order.STATUS_WAIT_PAY:
                     order.status = Order.STATUS_WAIT_DELIVER
                     order.pay_method = Order.PAY_METHOD_ALIPAY
-                    order.pay_time = order.pay_time or order.create_time
+                    order.pay_time = order.pay_time or timezone.now()
                     order.transaction_id = trade_no or order.transaction_id
                     order.save(update_fields=["status", "pay_method", "pay_time", "transaction_id", "update_time"])
                     OrderLog.objects.create(

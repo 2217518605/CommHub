@@ -19,7 +19,11 @@ celery_app.autodiscover_tasks(lambda: settings.INSTALLED_APPS)
 celery_app.conf.beat_schedule = {
     "clear-expire-coupon-every-day": {
         "task": "celery_tasks.clear_expire_coupon.clear_expire_coupon",
-        "schedules": crontab(hour=3, minute=0),  # 每天凌晨3点执行
+        "schedule": crontab(hour=3, minute=0),  # 每天凌晨3点执行
+    },
+    "cancel-expire-orders-every-minute": {
+        "task": "celery_tasks.cancel_expire_orders.cancel_expire_orders",
+        "schedule": 60.0, # 每分钟执行
     }
 }
 
