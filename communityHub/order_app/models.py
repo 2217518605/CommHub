@@ -28,11 +28,13 @@ class Order(BaseModel):
     PAY_METHOD_ALIPAY = 1
     PAY_METHOD_WECHAT = 2
     PAY_METHOD_CASH_ON_DELIVERY = 3
+    PAY_METHOD_BALANCE = 4 
 
     PAY_METHOD_CHOICES = (
         (PAY_METHOD_ALIPAY, "支付宝"),
         (PAY_METHOD_WECHAT, "微信"),
         (PAY_METHOD_CASH_ON_DELIVERY, "货到付款"),
+        (PAY_METHOD_BALANCE, "用户钱包支付"),
     )
 
     SOURCE_WECHAT_MINI_PROGRAM = 1

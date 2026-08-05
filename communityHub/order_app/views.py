@@ -25,6 +25,8 @@ from order_app.validators import create_courier_number, create_order_number, cre
 from order_app.services import release_unpaid_order
 from discount_app.models import UserCoupon
 from discount_app.utils import calculate_discount
+from user_app.models import User
+from wallet_app.models import BalanceLog
 
 logger = logging.getLogger(__name__)
 
@@ -146,7 +148,7 @@ class OrderViewSet(ViewSet):
                 )
 
                 if user_coupon:
-                    user_coupon.status = 1
+                    user_coupon.status = 3  # 变为锁定状态
                     user_coupon.used_time = timezone.now()
                     user_coupon.order = order
                     user_coupon.save(update_fields=["status", "used_time", "order", "update_time"])
@@ -386,6 +388,12 @@ class OrderPaymentViewSet(ViewSet):
                     ip_address=get_client_ip(request),
                 )
                 logger.info(f"订单支付状态同步成功: {order_number}")
+                
+                # 更新优惠券状态为已使用:
+                if order.user_coupon:
+                    order.user_coupon.status = 1
+                    order.user_coupon.save(update_fields=["status", "update_time"])
+                
                 return common_response(status=status.HTTP_200_OK, message="支付成功", data={
                     "order_number": order.order_number,
                     "status": order.status,
@@ -393,11 +401,81 @@ class OrderPaymentViewSet(ViewSet):
                 })
 
             logger.info(f"订单未支付: {order_number}, trade_status={trade_status}")
+            
+            # 恢复优惠券状态为未使用:
+            if order.user_coupon:
+                order.user_coupon.status = 0
+                order.user_coupon.save(update_fields=["status", "update_time"])
+            
             return common_response(status=status.HTTP_200_OK, message="订单尚未支付", data={
                 "order_number": order.order_number,
                 "status": order.status,
                 "is_paid": False,
             })
+            
+    @api_doc(tags=["订单 用户钱包支付"], request_body=None, response_body=None)
+    @api_post
+    @method_decorator(ratelimit(key="ip", rate="5/m", block=True, method="POST"))
+    @transaction.atomic
+    def balance_pay(self, request):
+        """ 用户钱包支付 """
+        
+        order_number = request.data.get("order_number")
+        order = get_object_or_404(Order.objects.select_related("user", "organization", "goods"), msg="订单不存在",order_number=order_number)
+        
+        # 校验订单:
+        if order.user_id != request.user.id:
+            logger.warning("订单 用户钱包支付订单不属于当前用户，无权支付")
+            return common_response(status=status.HTTP_403_FORBIDDEN, message="订单 用户钱包支付订单不属于当前用户，无权支付")
+        if order.status != Order.STATUS_WAIT_PAY:
+            logger.warning("订单 用户钱包支付订单状态不正确，无法支付")
+            return common_response(status=status.HTTP_400_BAD_REQUEST, message="订单 用户钱包支付订单状态不正确，无法支付")
+        if order.pay_method != Order.PAY_METHOD_BALANCE:
+            logger.warning("订单 用户钱包支付订单支付方式不正确，无法支付")
+            return common_response(status=status.HTTP_400_BAD_REQUEST, message="订单 用户钱包支付订单支付方式不正确，无法支付")
+        
+        user = User.objects.select_for_update().get(id=order.user_id)
+        if user.balance < order.pay_price:
+            logger.warning("订单 用户钱包支付订单余额不足，无法支付")
+            return common_response(status=status.HTTP_400_BAD_REQUEST, message="订单 用户钱包支付订单余额不足，无法支付")
+        
+        # 余额变动：
+        user_balance_before = user.balance
+        user.balance = F('balance') - order.pay_price
+        user.save(update_fields=["balance", "update_time"])
+        user.refresh_from_db() # 刷新用户余额，避免缓存问题
+        user_balance_after = user.balance
+        BalanceLog.objects.create(
+            user=user,
+            change_amount=-order.pay_price,
+            balance_before=user_balance_before,
+            balance_after=user_balance_after,
+            source_type=BalanceLog.SourceType.CONSUME,
+            source_id = order.id,
+            remark=f"订单支付-{order.order_number}，使用用户钱包支付，支付金额：{order.pay_price}"
+        )
+        
+        # 更新优惠券：
+        if order.user_coupon:
+            order.user_coupon.status = 1
+            order.user_coupon.save(update_fields=["status", "update_time"])
+            
+        # 更新订单：
+        order.status = Order.STATUS_WAIT_DELIVER
+        order.pay_method = Order.PAY_METHOD_BALANCE
+        order.pay_time = order.pay_time or timezone.now()
+        order.save(update_fields=["status", "pay_method", "pay_time", "update_time"])
+        
+        # 创建订单日志：
+        OrderLog.objects.create(
+            order=order, operator=request.user, operator_name=request.user.username,
+            action=OrderLog.ACTION_PAY_SUCCESS,
+            message=f"用户钱包支付成功，支付金额：{order.pay_price}",
+            ip_address=get_client_ip(request)
+        )
+        
+        logger.info(f"订单 用户钱包支付成功: {order_number}")
+        return common_response(status=status.HTTP_200_OK, message="订单 用户钱包支付成功")
 
 
 class AlipayNotifyViewSet(ViewSet):
@@ -435,7 +513,7 @@ class AlipayNotifyViewSet(ViewSet):
                         message=f"支付宝支付失败，订单金额和交易金额不一致，订单号：{order.order_number}，订单金额：{order.pay_price}，交易金额：{total_amount}",
                         ip_address=get_client_ip(request),
                     )
-                    return HttpResponse("success")
+                    return HttpResponse("error")
                 
                 # 校验 app_id 是否一致:
                 app_id = os.getenv("ALIPAY_APP_ID")
@@ -450,7 +528,7 @@ class AlipayNotifyViewSet(ViewSet):
                         message=f"支付宝支付失败，订单app_id不一致，订单号：{order.order_number}，订单app_id：{order.app_id}，回调app_id：{payload.get('app_id')}",
                         ip_address=get_client_ip(request),
                     )
-                    return HttpResponse("success")
+                    return HttpResponse("error")
                 
                 if order.status == Order.STATUS_WAIT_PAY:
                     order.status = Order.STATUS_WAIT_DELIVER
@@ -467,6 +545,11 @@ class AlipayNotifyViewSet(ViewSet):
                         message=f"支付宝支付成功，流水号：{trade_no}，金额：{total_amount}",
                         ip_address=get_client_ip(request),
                     )
+                    
+                    # 更新优惠券状态:
+                    order.user_coupon.status = 1
+                    order.user_coupon.save(update_fields=["status", "update_time"])
+                    
         except Order.DoesNotExist:
             logger.warning("支付宝回调订单不存在: %s", out_trade_no)
             return HttpResponse("success")

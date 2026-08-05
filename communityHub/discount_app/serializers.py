@@ -1,4 +1,5 @@
 import logging
+from decimal import Decimal
 
 from rest_framework import serializers
 from django.utils import timezone
@@ -48,8 +49,25 @@ class CouponTemplateSerializer(serializers.ModelSerializer):
             logger.error("优惠券总量不能小于每人领取数量")
             raise serializers.ValidationError("优惠券总量不能小于每人领取数量")
 
-        if data.get("type") and isinstance(data.get("type"), int):
-            type = int(data.get("type"))
+        coupon_type = data.get("type")
+        min_purchase = data.get("min_purchase", 0)
+        discount_amount = data.get("discount_amount", 0)
+        discount = data.get("discount", Decimal("1.00"))
+
+        if coupon_type == 1:
+            if min_purchase <= 0:
+                raise serializers.ValidationError({"min_purchase": "满减券的消费门槛必须大于 0"})
+            if discount_amount <= 0:
+                raise serializers.ValidationError({"discount_amount": "满减券的优惠金额必须大于 0"})
+        elif coupon_type == 2:
+            if discount < Decimal("0.1") or discount > Decimal("1"):
+                raise serializers.ValidationError({"discount": "折扣券的折扣比例必须在 0.1 到 1 之间"})
+        elif coupon_type == 3:
+            if min_purchase != 0:
+                raise serializers.ValidationError({"min_purchase": "现金券不支持使用门槛"})
+            if discount_amount <= 0:
+                raise serializers.ValidationError({"discount_amount": "现金券的优惠金额必须大于 0"})
+
         return data
 
 
