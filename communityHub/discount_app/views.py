@@ -31,7 +31,7 @@ class CouponRetrieveViewSet(ViewSet):
     @api_post
     @method_decorator(ratelimit(key='user', rate='5/m', method='POST', block=True))
     def create(self, request):
-        if not (request.user.is_staff or (request.user.user_type or 0) >= 2):
+        if not (request.user.is_staff or request.user.user_type in ["admin", "super_admin"]):
             return common_response(status.HTTP_403_FORBIDDEN, message="无权限，仅管理员可创建")
         serializer = CouponTemplateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -56,7 +56,7 @@ class CouponRetrieveViewSet(ViewSet):
     @transaction.atomic
     @method_decorator(ratelimit(key='user', rate='5/m', method='PUT', block=True))
     def update(self, request, pk):
-        if not (request.user.is_staff or (request.user.user_type or 0) >= 2):
+        if not (request.user.is_staff or request.user.user_type in ["admin", "super_admin"]):
             return common_response(status.HTTP_403_FORBIDDEN, message="无权限，仅管理员可修改")
         # 悲观锁
         coupon_template = get_object_or_404(
@@ -90,8 +90,8 @@ class CouponRetrieveViewSet(ViewSet):
     def destroy(self, request, pk):
 
         user = request.user
-        if user.is_staff is False:
-            return common_response(status.HTTP_403_FORBIDDEN, message="您没有权限删除模板，请联系管理员！")
+        if not (user.is_staff or user.user_type in ["admin", "super_admin"]):
+            return common_response(status.HTTP_403_FORBIDDEN, message="无权限，仅管理员可删除")
 
         try:
             coupon_template = get_object_or_404(
