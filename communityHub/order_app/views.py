@@ -103,7 +103,6 @@ class OrderViewSet(ViewSet):
                     raise ValidationError("订单 商品库存不足，无法创建订单")
                 
                 freight_price = serializer.validated_data.get("freight_price") or Decimal("0")
-                discount_price = user_coupon.snapshot_value if user_coupon else Decimal("0")
                 total_price = goods.price * good_count
                 
                 if user_coupon:
@@ -119,7 +118,6 @@ class OrderViewSet(ViewSet):
                     organization=org,
                     goods=goods,
                     order_number=create_order_number(),
-                    transaction_id=create_transaction_id(),
                     status=serializer.validated_data.get("status", Order.STATUS_WAIT_PAY),
                     pay_method=serializer.validated_data.get("pay_method"),
                     pay_time=serializer.validated_data.get("pay_time"),
@@ -518,14 +516,14 @@ class AlipayNotifyViewSet(ViewSet):
                 # 校验 app_id 是否一致:
                 app_id = os.getenv("ALIPAY_APP_ID")
                 if app_id != payload.get("app_id"):
-                    logger.warning(f"支付宝回调订单app_id不一致，订单号：{order.order_number}，订单app_id：{order.app_id}，回调app_id：{payload.get('app_id')}")
+                    logger.warning(f"支付宝回调订单app_id不一致，订单号：{order.order_number}，订单app_id：{app_id}，回调app_id：{payload.get('app_id')}")
                     
                     OrderLog.objects.create(
                         order=order,
                         operator=order.user,
                         operator_name=order.user.username,
                         action=OrderLog.ACTION_PAY_FAILED,
-                        message=f"支付宝支付失败，订单app_id不一致，订单号：{order.order_number}，订单app_id：{order.app_id}，回调app_id：{payload.get('app_id')}",
+                        message=f"支付宝支付失败，订单app_id不一致，订单号：{order.order_number}，订单app_id：{app_id}，回调app_id：{payload.get('app_id')}",
                         ip_address=get_client_ip(request),
                     )
                     return HttpResponse("error")

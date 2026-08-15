@@ -783,9 +783,8 @@ function newCouponTpl() {
   showModal('创建优惠券模板', `
     <form id="couponForm" class="form-grid">
       <div class="form-field"><label>名称 *</label><input type="text" name="name" required></div>
-      <div class="form-field"><label>类型</label><select name="type"><option value="full-reduction">满减券</option><option value="discount">折扣券</option><option value="cash">现金券</option></select></div>
-      <div class="form-field"><label>面额/折扣</label><input type="number" name="discount" step="0.01" required></div>
-      <div class="form-field"><label>最低消费</label><input type="number" name="min_purchase" step="0.01" value="0"></div>
+      <div class="form-field"><label>类型</label><select name="type" id="couponType" onchange="switchCouponFields()"><option value="1">满减券</option><option value="2">折扣券</option><option value="3">现金券</option></select></div>
+      <div id="couponTypeFields" class="form-grid col-span-2"></div>
       <div class="form-field"><label>发放总数</label><input type="number" name="total_count" value="100"></div>
       <div class="form-field"><label>每人限领</label><input type="number" name="person_limit_count" value="1"></div>
       <div class="form-field"><label>生效时间</label><input type="datetime-local" name="valid_from"></div>
@@ -793,11 +792,29 @@ function newCouponTpl() {
       <div class="form-field col-span-2"><label>描述</label><textarea name="description"></textarea></div>
     </form>
     <div class="modal-footer"><button class="btn btn-ghost" onclick="closeModal()">取消</button><button class="btn btn-primary" onclick="saveCouponTpl()">创建</button></div>`, null, 'modal-lg');
+  switchCouponFields();
+}
+
+function switchCouponFields() {
+  const type = Number(document.getElementById('couponType')?.value);
+  const fields = document.getElementById('couponTypeFields');
+  if (!fields) return;
+  if (type === 1) fields.innerHTML = '<div class="form-field"><label>满多少（元）*</label><input type="number" name="min_purchase" min="0.01" step="0.01" required placeholder="例如：100"></div><div class="form-field"><label>减多少（元）*</label><input type="number" name="discount_amount" min="0.01" step="0.01" required placeholder="例如：20"></div>';
+  else if (type === 2) fields.innerHTML = '<div class="form-field col-span-2"><label>折扣（1-10）*</label><input type="number" name="discount_rate" min="1" max="10" step="0.1" required placeholder="例如：8，表示8折"></div>';
+  else fields.innerHTML = '<div class="form-field col-span-2"><label>面额（元）*</label><input type="number" name="discount_amount" min="0.01" step="0.01" required placeholder="例如：20"></div>';
 }
 
 async function saveCouponTpl() {
   const d = formData('#couponForm');
+  const type = Number(d.type);
   if (!d.name) { toast('请输入名称', 'warning'); return; }
+  if (type === 1 && (!d.min_purchase || !d.discount_amount)) { toast('请填写满多少和减多少', 'warning'); return; }
+  if (type === 2 && (!d.discount_rate || Number(d.discount_rate) < 1 || Number(d.discount_rate) > 10)) { toast('折扣请填写1到10', 'warning'); return; }
+  if (type === 3 && !d.discount_amount) { toast('请填写现金券面额', 'warning'); return; }
+  d.min_purchase = type === 1 ? Number(d.min_purchase) : 0;
+  d.discount_amount = type === 2 ? 0 : Number(d.discount_amount);
+  d.discount = type === 2 ? Number(d.discount_rate) / 10 : 1;
+  delete d.discount_rate;
   try { await api('/discount/coupon_template/', { method: 'POST', body: d }); closeModal(); toast('创建成功', 'success'); go('coupons'); } catch (e) { }
 }
 

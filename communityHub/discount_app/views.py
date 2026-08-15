@@ -7,7 +7,8 @@ from django_ratelimit.decorators import ratelimit
 from django.utils.decorators import method_decorator
 from django.utils import timezone
 from django.db import transaction
-from django.db.models import F
+from django.db.models import F, Q, Count, Subquery, OuterRef, IntegerField
+from django.db.models.functions import Coalesce
 
 from user_app.models import User
 from organization_app.models import Organization
@@ -43,9 +44,29 @@ class CouponRetrieveViewSet(ViewSet):
     @api_doc(tags=["优惠券 优惠卷模板列表"], response_body=CouponTemplateResponseSerializer)
     @api_get
     def list(self, request):
-        """获取所有激活的优惠券模板列表"""
+        """获取优惠券模板列表；claimable=1 时只返回当前用户可领取的模板"""
 
         queryset = CouponTemplate.objects.filter(is_active=True).order_by('-create_time')
+
+        if request.query_params.get("claimable"):
+            now = timezone.now()
+            queryset = queryset.filter(
+                Q(valid_from__isnull=True) | Q(valid_from__lte=now),
+                Q(valid_to__isnull=True) | Q(valid_to__gte=now),
+            )
+
+            # 排除用户已达到领取上限的模板
+            user_coupon_counts = UserCoupon.objects.filter(
+                user=request.user,
+                coupon_template=OuterRef('pk')
+            ).values('coupon_template').annotate(cnt=Count('id')).values('cnt')
+
+            queryset = queryset.annotate(
+                my_count=Coalesce(Subquery(user_coupon_counts, output_field=IntegerField()), 0)
+            ).exclude(
+                Q(person_limit_count__gt=0) & Q(my_count__gte=F('person_limit_count'))
+            )
+
         serializer = CouponTemplateResponseSerializer(queryset, many=True)
         return common_response(status.HTTP_200_OK, message="获取成功",
                                data={"list": serializer.data, "total": queryset.count()})
@@ -224,7 +245,7 @@ class UserCouponViewSet(ViewSet):
     @api_doc(tags=["优惠券 用户优惠券列表"], response_body=None)
     @api_get
     def list(self, request):
-        """获取当前用户优惠券（默认只返回可用，传 show_all=1 返回全部）"""
+        """ 获取当前用户优惠券（默认只返回可用，传 show_all=1 返回全部，传 group_by_template=1 按模板聚合）"""
 
         now = timezone.now()
         coupons = UserCoupon.objects.select_related("coupon_template").filter(
@@ -236,7 +257,32 @@ class UserCouponViewSet(ViewSet):
                 valid_from__lte=now,
                 valid_to__gte=now,
             )
-        coupons = coupons.order_by("-create_time")
+        coupons = coupons.order_by("coupon_template_id", "-create_time")
+
+        if request.query_params.get("group_by_template"):
+            # 当前用户可用券（未使用 + 未过期），按模板分组计数
+            
+            grouped = (UserCoupon.objects.filter(user=request.user,status=0,valid_from__lte=now,valid_to__gte=now)
+                       .values("coupon_template_id","valid_from","valid_to",coupon_name=F("coupon_template__name"),
+                               coupon_type=F("coupon_template__type"),discount_value=F("snapshot_value"),min_purchase=F("snapshot_min_purchase"))
+                .annotate(usable_count=Count("id"))
+                .order_by("-usable_count"))
+
+            data = []
+            for g in grouped:
+                data.append({
+                    "coupon_template_id": g["coupon_template_id"],
+                    "name": g["coupon_name"],
+                    "type": g["coupon_type"],
+                    "discount_value": g["discount_value"],
+                    "min_purchase": g["min_purchase"],
+                    "valid_from": g["valid_from"].strftime("%Y-%m-%d %H:%M:%S") if g["valid_from"] else None,
+                    "valid_to": g["valid_to"].strftime("%Y-%m-%d %H:%M:%S") if g["valid_to"] else None,
+                    "usable_count": g["usable_count"],
+                    "status": 0,
+                })
+            return common_response(status.HTTP_200_OK, message="获取成功",
+                                   data={"list": data, "total": len(data)})
 
         data = []
         for c in coupons:
@@ -254,7 +300,3 @@ class UserCouponViewSet(ViewSet):
             })
         return common_response(status.HTTP_200_OK, message="获取成功",
                                data={"list": data, "total": len(data)})
-
-
-class UserQueryCouponViewSet:
-    pass

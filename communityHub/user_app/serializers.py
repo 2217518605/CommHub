@@ -1,4 +1,5 @@
 import logging
+import os
 
 from rest_framework import serializers
 
@@ -18,7 +19,7 @@ class UserRegisterSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = [
-            'account', 'password', 'password_confirm', "birth_date", "id_card", "balance",
+            'account', 'password', 'password_confirm', "birth_date", "id_card",
             'mobile', 'email', 'username', "organization_id", "user_type", "admin_secret"
         ]
         extra_kwargs = {
@@ -36,7 +37,7 @@ class UserRegisterSerializer(serializers.ModelSerializer):
         user_type = data.get("user_type")
         if user_type == "admin":
             secret = data.get("admin_secret") or ""
-            if secret != "admin123456":
+            if secret != os.getenv("ADMIN_SECRET"):
                 logger.info("用户 管理员创建失败，请填写正确的密钥！")
                 raise serializers.ValidationError("管理员密钥不正确")
         return data
@@ -89,7 +90,7 @@ class UserUpdateSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = [
-            'username', 'mobile', 'email', 'avatar', 'birth_date', 'id_card', 'balance', "organization", "password"]
+            'username', 'mobile', 'email', 'avatar', 'birth_date', 'id_card', "organization"]
 
     def validate_birth_date(self, value):
         if value == '' or (isinstance(value, str) and not value.strip()):
@@ -120,7 +121,7 @@ class UserResponseSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = [
-            'id', 'username', "account", "password", 'mobile', 'email', 'avatar', 'birth_date', 'id_card', 'balance',
+            'id', 'username', "account", 'mobile', 'email', 'avatar', 'birth_date', 'id_card', 'balance',
             "organization_id", "organization_name",
             "is_active", "is_staff", "user_type", "last_login"
         ]

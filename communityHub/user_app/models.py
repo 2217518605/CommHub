@@ -81,7 +81,7 @@ class User(BaseModel):
 class UserLoginLog(BaseModel):
     """ 用户登录日志 """
 
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="user_login_log", verbose_name="用户登录日志")
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="user_login_log", verbose_name="用户登录日志",null=True)
     login_time = models.DateTimeField(verbose_name='登录时间', help_text="登录时间", auto_now_add=True)
     login_ip = models.CharField(max_length=50, verbose_name="登录的ip", help_text="登录的ip")
     login_status = models.CharField(verbose_name='登录|登出状态', help_text="登录|登出状态", max_length=20)

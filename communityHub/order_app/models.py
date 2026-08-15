@@ -135,6 +135,7 @@ class OrderLog(BaseModel):
     ACTION_UPDATE_ADDRESS = 7
     ACTION_ADMIN_REMARK = 8
     ACTION_SYSTEM_TIMEOUT = 9
+    ACTION_PAY_FAILED = 10
 
     ACTION_CHOICES = (
         (ACTION_CREATE_ORDER, "创建订单"),
@@ -146,6 +147,7 @@ class OrderLog(BaseModel):
         (ACTION_UPDATE_ADDRESS, "修改地址"),
         (ACTION_ADMIN_REMARK, "后台备注"),
         (ACTION_SYSTEM_TIMEOUT, "系统超时"),
+        (ACTION_PAY_FAILED,"支付失败")
     )
 
     # 如果订单没了，日志通常也没意义

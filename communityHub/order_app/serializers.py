@@ -18,7 +18,7 @@ class OrderCreateSerializer(serializers.Serializer):
     user_coupon_id = serializers.IntegerField(required=False, allow_null=True)
     good_count = serializers.IntegerField(required=True, min_value=1)
     pay_method = serializers.ChoiceField(choices=Order.PAY_METHOD_CHOICES, required=True)
-    freight_price = serializers.DecimalField(max_digits=10, decimal_places=2, required=False, min_value=0)
+    freight_price = serializers.DecimalField(max_digits=10, decimal_places=2, required=False, min_value=Decimal("0"))
     address = serializers.CharField(required=False, max_length=255)
     goods_spec = serializers.JSONField(required=False, allow_null=True)
     user_remark = serializers.CharField(required=False, allow_null=True, allow_blank=True, max_length=255)
@@ -26,7 +26,7 @@ class OrderCreateSerializer(serializers.Serializer):
 
 
 class OrderCommonSerializer(serializers.ModelSerializer):
-    """ 订单通用入参序列化器(创建、更新) """
+    """ 订单通用入参序列化器(更新) """
 
     user_id = serializers.IntegerField(help_text="用户ID", required=False)
     organization_id = serializers.IntegerField(help_text="组织ID", required=False)

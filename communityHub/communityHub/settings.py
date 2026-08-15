@@ -24,12 +24,12 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = "django-insecure-_-h*sbe(tyjbjv=_+i6hd87xv8_df_1*qkq1gofi3!6=somt-6"
+SECRET_KEY = os.getenv("SECRET_KEY")
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = False
 
-ALLOWED_HOSTS = ["*"]
+ALLOWED_HOSTS = ["127.0.0.1", "localhost","106.55.107.72","rixuan.site"]
 
 # Application definition
 
@@ -92,11 +92,11 @@ WSGI_APPLICATION = 'communityHub.wsgi.application'
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.mysql",
-        "NAME": 'communityHub',
-        "USER": 'root',
-        "PASSWORD": '123456',
-        "HOST": '127.0.0.1',
-        "PORT": "3306"
+        "NAME": os.getenv("DB_NAME", "communityHub"),
+        "USER": os.getenv("DB_USER", "root"),
+        "PASSWORD": os.getenv("DB_PASSWORD", ""),
+        "HOST": os.getenv("DB_HOST", "127.0.0.1"),
+        "PORT": os.getenv("DB_PORT", "3306"),
     }
 }
 
@@ -148,11 +148,6 @@ MEDIA_ROOT = BASE_DIR / 'media'  # 用户上传文件的根目录
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
-
-# 静态文件路径：
-STATICFILES_DIRS = [
-    os.path.join(BASE_DIR, "static")  # 可存放多个静态文件路径
-]
 
 # 生产环境下静态文件的收集目录（可选，部署时使用）
 # 执行 collectstatic 命令后，所有静态文件会被复制到该目录

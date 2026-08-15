@@ -6,7 +6,7 @@ import datetime
 from django.core.cache import cache
 from django.utils import timezone
 from django.db import transaction
-# from django.shortcuts import get_object_or_404
+from django.shortcuts import get_object_or_404
 from rest_framework import status
 from rest_framework.viewsets import ViewSet
 from rest_framework_simplejwt.tokens import RefreshToken, AccessToken
@@ -148,11 +148,17 @@ class UserLoginView(ViewSet):
         ip_lock_response = check_ip_lock(request)
         if ip_lock_response:
             return ip_lock_response
+        try:
+            user = User.objects.get(account=request.data.get('account'))
+        except Exception as e:
+            logger.error(f"账号不存在，请您注册: {e}", exc_info=True)
+            user = None
+            return common_response(status=status.HTTP_403_FORBIDDEN, message="账号不存在，请您前往注册！")
 
         serializer = UserLoginSerializer(data=request.data)
         if not serializer.is_valid():
             logger.warning(f"用户登录失败 - IP: {client_ip} 登录参数校验失败：{serializer.errors}")
-            UserLoginLog.objects.create(user=request.user, login_time=timezone.now(), login_ip=get_client_ip(request),
+            UserLoginLog.objects.create(user=user, login_time=timezone.now(), login_ip=get_client_ip(request),
                                         login_status="失败", login_type="登录失败")
             return common_response(status=status.HTTP_400_BAD_REQUEST, message="用户 登录参数校验失败",
                                    data=serializer.errors)
