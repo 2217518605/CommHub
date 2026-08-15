@@ -219,3 +219,9 @@ __marimo__/
 
 # json files
 *.json
+
+# Keys & certificates (never commit private keys)
+*.pem
+*.pem.*
+*.key
+*.crt
